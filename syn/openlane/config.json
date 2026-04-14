@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "version": 2
+  },
+  "PDK": "sky130A",
+  "DESIGN_NAME": "tt_um_crypto_top",
+  "VERILOG_FILES": [
+    "dir::../../rtl/chacha20/chacha20_qr.v",
+    "dir::../../rtl/chacha20/chacha20_core.v",
+    "dir::../../rtl/poly1305/poly1305_core.v",
+    "dir::../../rtl/aes/aes_sbox.v",
+    "dir::../../rtl/aes/aes_core.v",
+    "dir::../../rtl/des/des_core.v",
+    "dir::../../rtl/tt_wrapper/tt_um_crypto_top.v"
+  ],
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 20,
+  "DIE_AREA": "0 0 460 172",
+
+  "SYNTH_STRATEGY": "DELAY 0",
+  "SYNTH_MAX_FANOUT": 10,
+  "PL_TARGET_DENSITY_PCT": 50,
+  "CELL_PAD": 4,
+  "FP_CORE_UTIL": 45,
+  "FP_ASPECT_RATIO": 1,
+  "ROUTING_CORES": 4,
+  "RT_MAX_LAYER": "met4",
+  "MAGIC_DRC_USE_GDS": true,
+  "RUN_KLAYOUT_DRC": false,
+  "MAX_TRANSITION_CONSTRAINT": 1.5,
+  "MAX_FANOUT_CONSTRAINT": 16,
+  "DESIGN_IS_CORE": false,
+  "VDD_NETS": [
+    "vccd1"
+  ],
+  "GND_NETS": [
+    "vssd1"
+  ],
+  "QUIT_ON_TIMING_VIOLATIONS": false,
+  "QUIT_ON_HOLD_VIOLATIONS": false
+}
