@@ -1,0 +1,175 @@
+CAPI=2:
+# ============================================================
+# open_crypto_hdl.core — FuseSoC Core Description
+# Package manager for open-source EDA tools
+#
+# Install FuseSoC: pip install fusesoc
+# Register:        fusesoc library add open-crypto-hdl .
+# Run simulation:  fusesoc run --target sim open-crypto-hdl:chacha20:0.1.0
+# Run synthesis:   fusesoc run --target synth open-crypto-hdl:chacha20:0.1.0
+# ============================================================
+
+name: open-crypto-hdl:chacha20:0.1.0
+description: ChaCha20 stream cipher (RFC 8439) — RTL core
+
+filesets:
+  rtl:
+    files:
+      - rtl/chacha20/chacha20_qr.v
+      - rtl/chacha20/chacha20_core.v
+    file_type: verilogSource
+
+  tb_sv:
+    files:
+      - tb/sv/tb_chacha20.sv
+    file_type: systemVerilogSource
+
+  tb_cocotb:
+    files:
+      - tb/cocotb/test_chacha20.py
+    file_type: pythonSource
+
+targets:
+  default: &default
+    filesets: [rtl]
+    toplevel: chacha20_core
+
+  sim:
+    <<: *default
+    description: Simulate with cocotb/Icarus
+    filesets: [rtl, tb_sv]
+    toplevel: tb_chacha20
+    tools:
+      icarus:
+        iverilog_options: [-g2012]
+
+  synth:
+    <<: *default
+    description: Synthesize with Yosys
+    tools:
+      yosys:
+        synth_script: syn/yosys/area_estimate.ys
+
+---
+CAPI=2:
+name: open-crypto-hdl:des:0.1.0
+description: DES block cipher (FIPS 46-3) — 16-round Feistel RTL core
+
+filesets:
+  rtl:
+    files:
+      - rtl/des/des_core.v
+    file_type: verilogSource
+
+  tb_sv:
+    files:
+      - tb/sv/tb_des.sv
+    file_type: systemVerilogSource
+
+targets:
+  default: &default
+    filesets: [rtl]
+    toplevel: des_core
+
+  sim:
+    <<: *default
+    filesets: [rtl, tb_sv]
+    toplevel: tb_des
+    tools:
+      icarus:
+        iverilog_options: [-g2012]
+
+---
+CAPI=2:
+name: open-crypto-hdl:aes256:0.1.0
+description: AES-256 block cipher (FIPS 197) — iterative 14-round RTL core
+
+filesets:
+  rtl:
+    files:
+      - rtl/aes/aes_sbox.v
+      - rtl/aes/aes_core.v
+    file_type: verilogSource
+
+  tb_cocotb:
+    files:
+      - tb/cocotb/test_aes.py
+    file_type: pythonSource
+
+targets:
+  default: &default
+    filesets: [rtl]
+    toplevel: aes_core
+
+  sim:
+    <<: *default
+    tools:
+      icarus:
+        iverilog_options: [-g2005-sv]
+
+---
+CAPI=2:
+name: open-crypto-hdl:aes-gcm:0.1.0
+description: AES-256-GCM AEAD (NIST SP 800-38D) — top-level integration
+
+filesets:
+  rtl:
+    files:
+      - rtl/aes/aes_sbox.v
+      - rtl/aes/aes_core.v
+      - rtl/gcm/gf128_mul.v
+      - rtl/gcm/ghash_core.v
+      - rtl/aes_gcm/aes_gcm_top.v
+    file_type: verilogSource
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: aes_gcm_top
+
+---
+CAPI=2:
+name: open-crypto-hdl:chacha20poly1305:0.1.0
+description: ChaCha20-Poly1305 AEAD (RFC 8439) — full integration
+
+filesets:
+  rtl:
+    files:
+      - rtl/chacha20/chacha20_qr.v
+      - rtl/chacha20/chacha20_core.v
+      - rtl/poly1305/poly1305_core.v
+      - rtl/chacha20poly1305/chacha20poly1305_top.v
+    file_type: verilogSource
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: chacha20poly1305_top
+
+---
+CAPI=2:
+name: open-crypto-hdl:tt-top:0.1.0
+description: TinyTapeout top-level wrapper — all three ciphers with SPI control
+
+filesets:
+  rtl:
+    files:
+      - rtl/chacha20/chacha20_qr.v
+      - rtl/chacha20/chacha20_core.v
+      - rtl/aes/aes_sbox.v
+      - rtl/aes/aes_core.v
+      - rtl/des/des_core.v
+      - rtl/tt_wrapper/tt_um_crypto_top.v
+    file_type: verilogSource
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: tt_um_crypto_top
+
+  synth:
+    filesets: [rtl]
+    toplevel: tt_um_crypto_top
+    tools:
+      openlane:
+        config_file: syn/openlane/config.json
