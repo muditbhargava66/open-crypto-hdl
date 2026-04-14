@@ -1,0 +1,8 @@
+// ============================================================
+//  des_formal.sby — SymbiYosys Formal Verification for DES
+//  Properties:
+//    P1: done is exactly one-cycle wide
+//    P2: done never fires when idle (no load seen)
+//    P3: phase counter stays in [0..2]
+//    P4: round_cnt stays in [0..15] during operation
+// ============================================================
