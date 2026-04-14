@@ -1,0 +1,105 @@
+# TinyTapeout Project Descriptor
+# https://tinytapeout.com/hdl/
+
+project:
+  title: "Open Crypto HDL — ChaCha20-Poly1305 / AES-256-GCM / DES"
+  author: "open-crypto-hdl contributors"
+  description: |
+    Three production-grade cryptographic cipher cores in a single TinyTapeout
+    tile. Selectable via SPI control:
+      - ChaCha20 stream cipher (RFC 8439, 20-round, 256-bit key)
+      - AES-256-GCM authenticated encryption (FIPS 197 + NIST SP 800-38D)
+      - DES block cipher (FIPS 46-3, 16-round Feistel, encrypt/decrypt)
+
+    All cores are iterative (area-optimal) with a shared SPI register file
+    control interface. Authentication tags for both AEAD ciphers are available
+    via the SPI result registers.
+
+  language: Verilog 2001 / SystemVerilog
+  clock_hz: 50_000_000   # 50 MHz target
+  
+  tiles: "2x2"           # 2×2 tile for area headroom (AES is large)
+
+  # Input usage
+  ui:
+    - name: result_byte_sel
+      description: "Select which result byte to display on uo_out [3:0]"
+      bits: "3:0"
+    - name: reserved
+      bits: "7:4"
+
+  # Output usage
+  uo:
+    - name: result_byte
+      description: "Selected result byte (from result register file)"
+      bits: "7:0"
+
+  # Bidirectional (SPI)
+  uio:
+    - name: SCK
+      description: "SPI clock"
+      direction: input
+      bit: 0
+    - name: MOSI
+      description: "SPI master-out slave-in"
+      direction: input
+      bit: 1
+    - name: MISO
+      description: "SPI master-in slave-out"
+      direction: output
+      bit: 2
+    - name: CS_N
+      description: "SPI chip select (active low)"
+      direction: input
+      bit: 3
+    - name: reserved
+      direction: input
+      bits: "7:4"
+
+  # Resources used
+  resources:
+    clock: true
+    reset: true
+
+  # GitHub Actions based flow
+  github_action: tt-gha-ci
+
+  # Tags for discoverability
+  tags:
+    - crypto
+    - chacha20
+    - aes
+    - des
+    - security
+    - AEAD
+    - SPI
+
+  documentation:
+    how_it_works: |
+      The chip exposes three cipher engines behind a SPI register file.
+      Write the CIPHER_SEL register to choose DES/AES-GCM/ChaCha20.
+      Write key, IV/nonce, and input block bytes via SPI. Assert CMD=START.
+      Poll STATUS until DONE is set, then read result bytes via ui_in selector.
+
+    how_to_test: |
+      1. Connect SPI master (e.g., RP2040 or logic analyser) to uio[3:0].
+      2. Write 0x00 → 0x01 (select AES-GCM).
+      3. Write 32 key bytes to registers 0x10–0x2F.
+      4. Write 16 plaintext bytes to 0x40–0x4F.
+      5. Write CMD=0x01 to register 0x01.
+      6. Poll register 0x02 until bit 1 (DONE) is set.
+      7. Read result bytes via ui_in[3:0] selector.
+      8. Verify against a software reference (pycryptodome, OpenSSL).
+
+    external_hardware: |
+      - SPI master: RP2040 (Raspberry Pi Pico), Arduino, or FT232H
+      - Optional: logic analyser for SPI inspection
+      - Optional: oscilloscope for clock integrity
+
+    references:
+      - "RFC 8439: ChaCha20 and Poly1305 for IETF Protocols"
+      - "FIPS 197: Advanced Encryption Standard (AES)"
+      - "NIST SP 800-38D: GCM Mode of Operation"
+      - "FIPS 46-3: Data Encryption Standard (DES)"
+      - "https://github.com/secworks/aes (reference implementation)"
+      - "https://tinytapeout.com"
