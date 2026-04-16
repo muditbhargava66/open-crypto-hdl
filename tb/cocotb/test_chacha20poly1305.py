@@ -46,7 +46,7 @@ RFC_PT_BLOCK0 = int.from_bytes(bytes([
 
 async def reset_dut(dut):
     """Apply reset sequence."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     dut.rst_n.value = 0
     dut.start.value = 0
@@ -77,7 +77,7 @@ async def test_aead_startup(dut):
             dut._log.info("✓ ChaCha20-Poly1305: entered BUSY state")
             break
     else:
-        raise cocotb.result.TestFailure("Never went busy")
+        assert False,("Never went busy")
 
     # Wait for OTK generation (ChaCha20 ctr=0, ~12 cycles)
     # The FSM transitions from S_OTK_WAIT to S_AAD once ChaCha20 completes

@@ -33,12 +33,18 @@
 // ============================================================
 `default_nettype none
 module tt_um_crypto_top (
-    input  wire [7:0] ui_in,
+    /* verilator lint_off UNUSED */
+    input  wire [7:0] ui_in,     // only [3:0] used (result byte index)
+    /* verilator lint_on UNUSED */
     output wire [7:0] uo_out,
-    input  wire [7:0] uio_in,
+    /* verilator lint_off UNUSED */
+    input  wire [7:0] uio_in,    // only bits [3,1,0] used (CS_N, MOSI, SCK)
+    /* verilator lint_on UNUSED */
     output wire [7:0] uio_out,
     output wire [7:0] uio_oe,
-    input  wire       ena,
+    /* verilator lint_off UNUSED */
+    input  wire       ena,       // TT-mandated, active-high enable (unused in this design)
+    /* verilator lint_on UNUSED */
     input  wire       clk,
     input  wire       rst_n
 );
@@ -56,12 +62,33 @@ module tt_um_crypto_top (
     reg  [7:0]  spi_data;
     reg         spi_rw;
     reg  [4:0]  spi_bit_cnt;
+    /* verilator lint_off UNUSED */
     reg  [23:0] spi_shift;
+    /* verilator lint_on UNUSED */
+    reg  [7:0]  miso_shift;
     reg         spi_done;
     reg         sck_prev;
 
     wire sck_rise = sck && !sck_prev;
     wire sck_fall = !sck && sck_prev;
+
+    // Register Read Multiplexer
+    reg [7:0] reg_read_data;
+    always @(*) begin
+        /* verilator lint_off WIDTH */
+        casez (spi_addr)
+            8'h00: reg_read_data = {6'b000000, cipher_sel};
+            8'h02: reg_read_data = status_reg;
+            8'h1?: reg_read_data = key_bytes[spi_addr[3:0]];
+            8'h2?: reg_read_data = key_bytes[{1'b1, spi_addr[3:0]}];
+            8'h3?: reg_read_data = (spi_addr[3:0] < 12) ? iv_bytes[spi_addr[3:0]] : 8'h00;
+            8'h4?: reg_read_data = block_bytes[spi_addr[3:0]];
+            8'h5?: reg_read_data = result_bytes[spi_addr[3:0]];
+            8'h6?: reg_read_data = tag_bytes[spi_addr[3:0]];
+            default: reg_read_data = 8'h00;
+        endcase
+        /* verilator lint_on WIDTH */
+    end
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -69,30 +96,39 @@ module tt_um_crypto_top (
             spi_done    <= 1'b0;
             sck_prev    <= 1'b0;
             miso        <= 1'b0;
+            miso_shift  <= 8'h00;
         end else begin
             sck_prev <= sck;
             spi_done <= 1'b0;
 
             if (cs_n) begin
                 spi_bit_cnt <= 5'd0;
+                miso        <= 1'b0;
             end else begin
                 if (sck_rise) begin
                     spi_shift <= {spi_shift[22:0], mosi};
                     if (spi_bit_cnt == 5'd16) begin
-                        spi_addr <= spi_shift[23:16];
-                        spi_rw   <= spi_shift[15];
-                        spi_data <= {spi_shift[14:8], mosi};
+                        spi_addr <= spi_shift[15:8];
+                        spi_rw   <= spi_shift[7];
+                        spi_data <= {spi_shift[6:0], mosi};
                         spi_done <= 1'b1;
                         spi_bit_cnt <= 5'd0;
                     end else begin
                         spi_bit_cnt <= spi_bit_cnt + 5'd1;
                     end
                 end
-                // MISO: drive register read data on fall
-                if (sck_fall && spi_rw) begin
-                    // read path (simplified: output STATUS byte)
-                    miso <= spi_shift[7];
+
+                if (sck_fall) begin
+                    if (spi_bit_cnt == 5'd9 && spi_rw) begin
+                        // Load read data into shift register
+                        miso_shift <= reg_read_data;
+                    end else if (spi_bit_cnt > 5'd9 && spi_rw) begin
+                        miso_shift <= {miso_shift[6:0], 1'b0};
+                    end
                 end
+                
+                // Drive MISO with MSB of shift register
+                miso <= spi_rw ? miso_shift[7] : 1'b0;
             end
         end
     end
@@ -100,10 +136,12 @@ module tt_um_crypto_top (
     // ---- Register file ----
     reg [1:0]  cipher_sel;   // 00=DES, 01=AES-GCM, 10=ChaCha20
     reg        cmd_start;
-    reg        cmd_reset;
     reg [7:0]  key_bytes  [0:31];
     reg [7:0]  iv_bytes   [0:11];
     reg [7:0]  block_bytes [0:15];
+    reg [7:0]  result_bytes [0:15];
+    reg [7:0]  tag_bytes [0:15];
+    reg [7:0]  status_reg;  // [0]=busy [1]=done
 
     // ---- Cipher interfaces ----
     wire [63:0]  des_key    = {key_bytes[0],key_bytes[1],key_bytes[2],key_bytes[3],
@@ -160,7 +198,9 @@ module tt_um_crypto_top (
     wire  [95:0] chacha_nonce = {iv_bytes[0],iv_bytes[1],iv_bytes[2],iv_bytes[3],
                                  iv_bytes[4],iv_bytes[5],iv_bytes[6],iv_bytes[7],
                                  iv_bytes[8],iv_bytes[9],iv_bytes[10],iv_bytes[11]};
-    wire [511:0] chacha_ks;
+    /* verilator lint_off UNUSED */
+    wire [511:0] chacha_ks;   // only top 128 bits used as output
+    /* verilator lint_on UNUSED */
     wire         chacha_done;
     reg          chacha_load;
     reg  [31:0]  chacha_ctr;
@@ -175,10 +215,6 @@ module tt_um_crypto_top (
         .keystream(chacha_ks),
         .valid_out(chacha_done)
     );
-
-    // ---- Result registers ----
-    reg [7:0] result_bytes [0:15];
-    reg [7:0] status_reg;  // [0]=busy [1]=done
 
     // ---- FSM ----
     reg [2:0] fsm;
@@ -202,6 +238,8 @@ module tt_um_crypto_top (
             for (ri = 0; ri < 32; ri = ri + 1) key_bytes[ri]   <= 8'h00;
             for (ri = 0; ri < 12; ri = ri + 1) iv_bytes[ri]    <= 8'h00;
             for (ri = 0; ri < 16; ri = ri + 1) block_bytes[ri] <= 8'h00;
+            for (ri = 0; ri < 16; ri = ri + 1) result_bytes[ri] <= 8'h00;
+            for (ri = 0; ri < 16; ri = ri + 1) tag_bytes[ri]   <= 8'h00;
         end else begin
             des_load    <= 1'b0;
             aes_load    <= 1'b0;
@@ -209,6 +247,7 @@ module tt_um_crypto_top (
 
             // ---- SPI register write ----
             if (spi_done && !spi_rw) begin
+                /* verilator lint_off WIDTH */
                 casez (spi_addr)
                     8'h00: cipher_sel     <= spi_data[1:0];
                     8'h01: begin
@@ -222,7 +261,9 @@ module tt_um_crypto_top (
                     8'h2?: key_bytes  [{1'b1,spi_addr[3:0]}] <= spi_data;
                     8'h3?: iv_bytes   [spi_addr[3:0]] <= spi_data;
                     8'h4?: block_bytes[spi_addr[3:0]] <= spi_data;
+                    default: ; // ignore unknown addresses
                 endcase
+                /* verilator lint_on WIDTH */
             end
 
             // ---- FSM ----
@@ -239,6 +280,7 @@ module tt_um_crypto_top (
                                 chacha_ctr  <= {block_bytes[0],block_bytes[1],
                                                 block_bytes[2],block_bytes[3]};
                             end
+                            default: ; // unsupported cipher
                         endcase
                         fsm <= FSM_WAIT;
                     end
@@ -265,7 +307,6 @@ module tt_um_crypto_top (
                             fsm <= FSM_DONE;
                         end
                         2'd2: if (chacha_done) begin
-                            // Output first 128 bits of keystream
                             {result_bytes[0],result_bytes[1],result_bytes[2],result_bytes[3],
                              result_bytes[4],result_bytes[5],result_bytes[6],result_bytes[7],
                              result_bytes[8],result_bytes[9],result_bytes[10],result_bytes[11],
@@ -273,6 +314,7 @@ module tt_um_crypto_top (
                                 <= chacha_ks[511:384];
                             fsm <= FSM_DONE;
                         end
+                        default: ;
                     endcase
                 end
 
@@ -280,6 +322,7 @@ module tt_um_crypto_top (
                     status_reg <= 8'h02; // done
                     fsm        <= FSM_IDLE;
                 end
+                default: ;
             endcase
         end
     end

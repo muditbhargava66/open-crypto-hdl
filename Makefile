@@ -15,7 +15,7 @@ PYTHON     ?= python3
 CHACHA_SRCS  = rtl/chacha20/chacha20_qr.v rtl/chacha20/chacha20_core.v
 POLY_SRCS    = rtl/poly1305/poly1305_core.v
 C20P_SRCS    = $(CHACHA_SRCS) $(POLY_SRCS) rtl/chacha20poly1305/chacha20poly1305_top.v
-AES_SRCS     = rtl/aes/aes_sbox.v rtl/aes/aes_core.v
+AES_SRCS     = rtl/aes/aes_core.v
 AES_CTR_SRCS = $(AES_SRCS) rtl/aes/aes_ctr.v
 GCM_SRCS     = rtl/gcm/gf128_mul.v rtl/gcm/ghash_core.v
 AES_GCM_SRCS = $(AES_SRCS) $(GCM_SRCS) rtl/aes_gcm/aes_gcm_top.v
@@ -79,54 +79,63 @@ cocotb-all: cocotb-chacha20 cocotb-des cocotb-aes cocotb-gf128 cocotb-ghash coco
 
 cocotb-chacha20:
 	@echo "==> cocotb ChaCha20..."
+	rm -rf sim_build
 	TOPLEVEL=chacha20_core MODULE=tb.cocotb.test_chacha20 \
 	VERILOG_SOURCES="$(CHACHA_SRCS)" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim
 
 cocotb-des:
 	@echo "==> cocotb DES..."
+	rm -rf sim_build
 	TOPLEVEL=des_core MODULE=tb.cocotb.test_des \
 	VERILOG_SOURCES="$(DES_SRCS)" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim
 
 cocotb-aes:
 	@echo "==> cocotb AES-256..."
+	rm -rf sim_build
 	TOPLEVEL=aes_core MODULE=tb.cocotb.test_aes \
 	VERILOG_SOURCES="$(AES_SRCS)" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim
 
 cocotb-gf128:
 	@echo "==> cocotb GF(2^128) multiplier..."
+	rm -rf sim_build
 	TOPLEVEL=gf128_mul MODULE=tb.cocotb.test_gf128_mul \
 	VERILOG_SOURCES="rtl/gcm/gf128_mul.v" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim
 
 cocotb-ghash:
 	@echo "==> cocotb GHASH..."
+	rm -rf sim_build
 	TOPLEVEL=ghash_core MODULE=tb.cocotb.test_ghash \
 	VERILOG_SOURCES="$(GCM_SRCS)" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim
 
 cocotb-poly1305:
 	@echo "==> cocotb Poly1305..."
+	rm -rf sim_build
 	TOPLEVEL=poly1305_core MODULE=tb.cocotb.test_poly1305 \
 	VERILOG_SOURCES="$(POLY_SRCS)" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim
 
 cocotb-aes-ctr:
 	@echo "==> cocotb AES-CTR..."
+	rm -rf sim_build
 	TOPLEVEL=aes_ctr MODULE=tb.cocotb.test_aes_ctr \
 	VERILOG_SOURCES="$(AES_CTR_SRCS)" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim
 
 cocotb-aes-gcm:
 	@echo "==> cocotb AES-GCM..."
+	rm -rf sim_build
 	TOPLEVEL=aes_gcm_top MODULE=tb.cocotb.test_aes_gcm \
 	VERILOG_SOURCES="$(AES_GCM_SRCS)" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim
 
 cocotb-chacha20poly1305:
 	@echo "==> cocotb ChaCha20-Poly1305..."
+	rm -rf sim_build
 	TOPLEVEL=chacha20poly1305_top MODULE=tb.cocotb.test_chacha20poly1305 \
 	VERILOG_SOURCES="$(C20P_SRCS)" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim

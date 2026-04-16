@@ -18,7 +18,7 @@ from cocotb.triggers import RisingEdge, ClockCycles
 
 async def reset_dut(dut):
     """Apply reset sequence."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     dut.rst_n.value = 0
     dut.start.value = 0
@@ -50,16 +50,16 @@ async def test_gcm_startup(dut):
             dut._log.info("✓ AES-GCM entered BUSY state")
             break
     else:
-        raise cocotb.result.TestFailure("AES-GCM never went busy")
+        assert False, "AES-GCM never went busy"
 
     # Wait for AAD ready (hash subkey generated)
-    for _ in range(100):
+    for _ in range(500):
         await RisingEdge(dut.clk)
         if int(dut.aad_ready.value) == 1:
             dut._log.info("✓ AES-GCM: hash subkey H generated, AAD ready")
             return
 
-    raise cocotb.result.TestFailure("Timeout: aad_ready never asserted")
+    assert False, "Timeout: aad_ready never asserted"
 
 
 @cocotb.test()
@@ -82,12 +82,12 @@ async def test_gcm_single_block_encrypt(dut):
     dut.start.value = 0
 
     # Wait for AAD ready
-    for _ in range(100):
+    for _ in range(500):
         await RisingEdge(dut.clk)
         if int(dut.aad_ready.value) == 1:
             break
     else:
-        raise cocotb.result.TestFailure("Timeout waiting for aad_ready")
+        assert False, "Timeout waiting for aad_ready"
 
     # Feed AAD block
     dut.aad_block.value = aad
@@ -99,7 +99,7 @@ async def test_gcm_single_block_encrypt(dut):
     # after GHASH of AAD completes. We'll wait for ct_valid or
     # a reasonable number of cycles for the GHASH (128+ cycles for GF128).
     ct_received = False
-    for _ in range(500):
+    for _ in range(2000):
         await RisingEdge(dut.clk)
 
         # Feed PT once the FSM is in S_PT state and keystream is ready
@@ -126,7 +126,7 @@ async def test_gcm_single_block_encrypt(dut):
     if ct_received:
         dut._log.info("✓ AES-256-GCM produced ciphertext (tag generation may need more cycles)")
     else:
-        raise cocotb.result.TestFailure("Timeout: no ciphertext or tag produced")
+        assert False, "Timeout: no ciphertext or tag produced"
 
 
 @cocotb.test()
@@ -143,7 +143,7 @@ async def test_gcm_zero_key_zero_pt(dut):
     dut.start.value = 0
 
     # Wait for AAD ready (skip AAD)
-    for _ in range(100):
+    for _ in range(500):
         await RisingEdge(dut.clk)
         if int(dut.aad_ready.value) == 1:
             break
@@ -155,7 +155,7 @@ async def test_gcm_zero_key_zero_pt(dut):
     dut.aad_valid.value = 0
 
     # Wait for state machine to process through
-    for _ in range(1000):
+    for _ in range(5000):
         await RisingEdge(dut.clk)
         if int(dut.tag_valid.value) == 1 or int(dut.ct_valid.value) == 1:
             dut._log.info("✓ AES-GCM zero-key zero-PT did not hang PASSED")

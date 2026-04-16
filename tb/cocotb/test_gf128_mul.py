@@ -52,7 +52,7 @@ GF128_VECTORS = [
 
 async def reset_dut(dut):
     """Apply reset sequence."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     dut.rst_n.value = 0
     dut.start.value = 0
@@ -74,7 +74,7 @@ async def gf128_multiply(dut, x: int, y: int) -> int:
         if int(dut.valid.value) == 1:
             return int(dut.result.value)
 
-    raise cocotb.result.TestFailure("GF128 multiply timeout: valid never asserted")
+    assert False,("GF128 multiply timeout: valid never asserted")
 
 
 @cocotb.test()

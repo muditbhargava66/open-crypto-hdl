@@ -34,7 +34,7 @@ NIST_VECTORS = [
 
 async def reset_dut(dut):
     """Apply reset sequence."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     dut.rst_n.value = 0
     dut.start.value = 0
@@ -66,7 +66,7 @@ async def test_nist_ctr_single_block(dut):
     dut.data_valid.value = 0
 
     # Wait for output
-    for _ in range(100):
+    for _ in range(500):
         await RisingEdge(dut.clk)
         if int(dut.data_out_valid.value) == 1:
             ct = int(dut.data_out.value)
@@ -80,7 +80,7 @@ async def test_nist_ctr_single_block(dut):
             dut._log.info("✓ NIST SP 800-38A CTR block 0 PASSED")
             return
 
-    raise cocotb.result.TestFailure("AES-CTR timeout")
+    assert False,("AES-CTR timeout")
 
 
 @cocotb.test()
@@ -104,7 +104,7 @@ async def test_ctr_counter_increments(dut):
     await RisingEdge(dut.clk)
     dut.data_valid.value = 0
 
-    for _ in range(100):
+    for _ in range(500):
         await RisingEdge(dut.clk)
         if int(dut.data_out_valid.value) == 1:
             new_ctr = int(dut.ctr_out.value)
@@ -114,7 +114,7 @@ async def test_ctr_counter_increments(dut):
             dut._log.info(f"✓ CTR auto-increment: {initial_ctr} → {new_ctr} PASSED")
             return
 
-    raise cocotb.result.TestFailure("Timeout waiting for first CTR output")
+    assert False,("Timeout waiting for first CTR output")
 
 
 @cocotb.test()

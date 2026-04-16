@@ -42,7 +42,7 @@ def pack_nonce(nonce_bytes: bytes) -> int:
 async def test_rfc8439_vector(dut):
     """Test ChaCha20 against RFC 8439 §A.1 test vector."""
     # Start clock
-    clock = Clock(dut.clk, 10, units="ns")  # 100 MHz
+    clock = Clock(dut.clk, 10, unit="ns")  # 100 MHz
     cocotb.start_soon(clock.start())
 
     # Reset
@@ -67,13 +67,17 @@ async def test_rfc8439_vector(dut):
         if dut.valid_out.value == 1:
             break
     else:
-        raise cocotb.result.TestFailure("Timeout: valid_out never asserted")
+        assert False,("Timeout: valid_out never asserted")
 
     # Capture keystream
     ks_int = int(dut.keystream.value)
-    ks_bytes = ks_int.to_bytes(64, 'big')
+    # The 512-bit bus is packed: {w[15], w[14], ..., w[0]}
+    # So byte 0 of the bus is byte 0 of w[0].
+    # int.to_bytes(64, 'little') puts byte 0 of the integer at the first byte of the result.
+    ks_bytes = ks_int.to_bytes(64, 'little')
 
-    # Extract words in little-endian (ChaCha20 output is LE)
+    # Extract words in little-endian (RFC 8439)
+    # Each word is 4 bytes, little-endian.
     ks_words = list(struct.unpack('<16I', ks_bytes))
 
     dut._log.info(f"Keystream word[0] = 0x{ks_words[0]:08x} (expect 0x{RFC_EXPECTED_KS_WORDS[0]:08x})")
@@ -93,7 +97,7 @@ async def test_rfc8439_vector(dut):
 @cocotb.test()
 async def test_consecutive_blocks(dut):
     """Verify counter increments produce different keystreams."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     dut.rst_n.value = 0
@@ -123,7 +127,7 @@ async def test_consecutive_blocks(dut):
 @cocotb.test()
 async def test_zero_key_nonce(dut):
     """Smoke test: zero key and nonce should not hang."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     dut.rst_n.value = 0
@@ -145,4 +149,4 @@ async def test_zero_key_nonce(dut):
             dut._log.info("✓ Zero-key zero-nonce test PASSED")
             return
 
-    raise cocotb.result.TestFailure("Timeout waiting for keystream")
+    assert False,("Timeout waiting for keystream")

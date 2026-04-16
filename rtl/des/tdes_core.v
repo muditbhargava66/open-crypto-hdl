@@ -34,7 +34,6 @@ module tdes_core (
     // ---- Key extraction ----
     wire [63:0] key1 = key[191:128];
     wire [63:0] key2 = key[127: 64];
-    wire [63:0] key3 = (mode[1]) ? key[191:128] : key[63:0];  // 2TDEA: k3=k1
 
     // ---- DES instance signals ----
     reg  [63:0]  des_block;
@@ -59,7 +58,12 @@ module tdes_core (
     // States: 0=idle, 1=op1_start, 2=op1_wait, 3=op2_start, 4=op2_wait,
     //         5=op3_start, 6=op3_wait, 7=output
     reg [2:0] state;
-    reg [1:0] mode_r;
+    /* verilator lint_off UNUSED */
+    reg [1:0] mode_r;  // [0]=direction, [1]=2TDEA select — used via key3 wire
+    /* verilator lint_on UNUSED */
+
+    // 2TDEA: key3 = key1; 3TDEA: key3 = key[63:0]
+    wire [63:0] key3 = mode_r[1] ? key1 : key[63:0];
 
     localparam S_IDLE      = 3'd0;
     localparam S_OP1_START = 3'd1;
@@ -89,7 +93,7 @@ module tdes_core (
                     end
                 end
 
-                // ── Operation 1 ─────────────────────────────────────────
+                // -- Operation 1 --
                 S_OP1_START: begin
                     // Encrypt: E(key1, block)   Decrypt: D(key3, block)
                     des_block   <= block;
@@ -105,7 +109,7 @@ module tdes_core (
                     end
                 end
 
-                // ── Operation 2 ─────────────────────────────────────────
+                // -- Operation 2 --
                 S_OP2_START: begin
                     // Encrypt: D(key2, inter1)  Decrypt: E(key2, inter1)
                     des_block   <= inter1;
@@ -121,7 +125,7 @@ module tdes_core (
                     end
                 end
 
-                // ── Operation 3 ─────────────────────────────────────────
+                // -- Operation 3 --
                 S_OP3_START: begin
                     // Encrypt: E(key3, inter2)  Decrypt: D(key1, inter2)
                     des_block   <= inter2;

@@ -39,7 +39,7 @@ AESAVS_VECTORS = [
 
 async def reset_dut(dut):
     """Apply reset sequence."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     dut.rst_n.value = 0
     dut.load.value  = 0
@@ -56,12 +56,12 @@ async def aes_encrypt(dut, key: int, plaintext: int) -> int:
     await RisingEdge(dut.clk)
     dut.load.value = 0
 
-    for _ in range(100):
+    for _ in range(500):
         await RisingEdge(dut.clk)
         if int(dut.done.value) == 1:
             return int(dut.ciphertext.value)
 
-    raise cocotb.result.TestFailure("AES timeout: done never asserted")
+    assert False, "AES timeout: done never asserted"
 
 
 @cocotb.test()

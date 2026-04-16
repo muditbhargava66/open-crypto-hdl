@@ -2,19 +2,12 @@
 //  aes_core.v — AES-256 Core (Encryption Only)
 //  FIPS-197 — 14 rounds, 256-bit key
 //
-//  Iterative datapath: one round per clock.
-//  Total latency: 16 cycles (1 load + 14 rounds + 1 output)
-//
-//  The core pre-expands the key on load and stores all 15
-//  round keys in a register file. This avoids the on-the-fly
-//  key schedule latency on each block.
-//
-//  Interface:
-//    key[255:0]       — AES-256 key (big-endian bytes)
-//    plaintext[127:0] — 128-bit block
-//    load             — pulse to start encryption
-//    ciphertext[127:0]— encrypted output
-//    done             — pulses for one cycle when ready
+//  Area-optimized version for TinyTapeout.
+//  Iterative datapath: 4 cycles for SubBytes, 4 cycles for MixColumns,
+//  4 cycles for AddRoundKey, 1 cycle for ShiftRows.
+//  Iterative key expansion: one 32-bit word per cycle.
+//  Shared 4 S-Boxes between key expansion and SubBytes.
+//  Shift-register based key storage with only shift-by-one to minimize area.
 // ============================================================
 `default_nettype none
 module aes_core (
@@ -34,220 +27,220 @@ module aes_core (
         end
     endfunction
 
-    // ---- GF(2^8) multiply ----
-    function [7:0] gfmul;
-        input [7:0] a, b;
-        reg [7:0] p, aa;
-        integer k;
-        begin
-            p = 8'h00; aa = a;
-            for (k = 0; k < 8; k = k + 1) begin
-                if (b[k]) p = p ^ aa;
-                aa = xtime(aa);
-            end
-            gfmul = p;
-        end
-    endfunction
-
-    // ---- SubWord (4 S-box applications) ----
-    wire [7:0] sb_in [0:3];
-    wire [7:0] sb_out [0:3];
-    genvar gx;
-    generate
-        for (gx = 0; gx < 4; gx = gx + 1) begin : SBOX
-            aes_sbox u_sb (.in(sb_in[gx]), .out(sb_out[gx]), .inv());
-        end
-    endgenerate
-
-    // ---- Round constants ----
-    function [7:0] rcon;
-        input integer r;
-        reg [7:0] rc;
-        integer i;
-        begin
-            rc = 8'h01;
-            for (i = 1; i < r; i = i + 1) rc = xtime(rc);
-            rcon = rc;
-        end
-    endfunction
-
     // ---- State ----
-    // state[row][col] — 4×4 bytes
     reg [7:0] state [0:3][0:3];
-    reg [7:0] rk [0:14][0:3][0:3]; // 15 round keys, each 128-bit
+    reg [31:0] w [0:59]; // 60 words for AES-256, used as a rotating shift register
 
-    reg [3:0] phase;      // 0=idle, 1=keygen, 2..15=rounds, 16=done
-    reg [3:0] rk_idx;     // which round key are we generating
-    reg       busy;
+    // FSM States
+    localparam STATE_IDLE         = 3'd0;
+    localparam STATE_KEYGEN       = 3'd1;
+    localparam STATE_INIT_ADDRK   = 3'd2;
+    localparam STATE_SUBBYTES     = 3'd3;
+    localparam STATE_SHIFTROWS    = 3'd4;
+    localparam STATE_MIXCOLUMNS   = 3'd5;
+    localparam STATE_ADDRK        = 3'd6;
+    localparam STATE_DONE         = 3'd7;
 
-    // Key schedule words — stored flat for easier manipulation
-    reg [31:0] w [0:59]; // 60 words for AES-256
+    reg [2:0] phase;
+    reg [5:0] keygen_cnt;
+    reg [3:0] round_cnt;
+    reg [1:0] loop_cnt; // Replaces subbytes_cnt, used for 4-cycle steps
+    reg [7:0] rcon_val;
 
-    integer r, c, i;
+    reg [31:0] new_word;
 
-    // ---- Key expansion (combinational helper) ----
-    // We do this piecemeal over multiple cycles, 1 word/cycle is too slow.
-    // Instead, precompute all round keys in one cycle using generate blocks
-    // for real silicon; here we use a task for simulation clarity.
-
-    task apply_sub_bytes;
-        integer tr, tc;
-        reg [7:0] sb_tmp [0:255];
-        begin
-            // Call sbox_fwd via function
-            for (tr = 0; tr < 4; tr = tr + 1)
-                for (tc = 0; tc < 4; tc = tc + 1)
-                    state[tr][tc] <= sbox_fwd_task(state[tr][tc]);
-        end
-    endtask
+    // ---- S-Box Sharing Logic ----
+    wire [7:0] sbox_in[0:3];
+    wire [7:0] sbox_out[0:3];
 
     function [7:0] sbox_fwd_task;
         input [7:0] x;
-        reg [7:0] t [0:255];
         begin
-            t[  0]=8'h63; t[  1]=8'h7c; t[  2]=8'h77; t[  3]=8'h7b; t[  4]=8'hf2; t[  5]=8'h6b; t[  6]=8'h6f; t[  7]=8'hc5;
-            t[  8]=8'h30; t[  9]=8'h01; t[ 10]=8'h67; t[ 11]=8'h2b; t[ 12]=8'hfe; t[ 13]=8'hd7; t[ 14]=8'hab; t[ 15]=8'h76;
-            t[ 16]=8'hca; t[ 17]=8'h82; t[ 18]=8'hc9; t[ 19]=8'h7d; t[ 20]=8'hfa; t[ 21]=8'h59; t[ 22]=8'h47; t[ 23]=8'hf0;
-            t[ 24]=8'had; t[ 25]=8'hd4; t[ 26]=8'ha2; t[ 27]=8'haf; t[ 28]=8'h9c; t[ 29]=8'ha4; t[ 30]=8'h72; t[ 31]=8'hc0;
-            t[ 32]=8'hb7; t[ 33]=8'hfd; t[ 34]=8'h93; t[ 35]=8'h26; t[ 36]=8'h36; t[ 37]=8'h3f; t[ 38]=8'hf7; t[ 39]=8'hcc;
-            t[ 40]=8'h34; t[ 41]=8'ha5; t[ 42]=8'he5; t[ 43]=8'hf1; t[ 44]=8'h71; t[ 45]=8'hd8; t[ 46]=8'h31; t[ 47]=8'h15;
-            t[ 48]=8'h04; t[ 49]=8'hc7; t[ 50]=8'h23; t[ 51]=8'hc3; t[ 52]=8'h18; t[ 53]=8'h96; t[ 54]=8'h05; t[ 55]=8'h9a;
-            t[ 56]=8'h07; t[ 57]=8'h12; t[ 58]=8'h80; t[ 59]=8'he2; t[ 60]=8'heb; t[ 61]=8'h27; t[ 62]=8'hb2; t[ 63]=8'h75;
-            t[ 64]=8'h09; t[ 65]=8'h83; t[ 66]=8'h2c; t[ 67]=8'h1a; t[ 68]=8'h1b; t[ 69]=8'h6e; t[ 70]=8'h5a; t[ 71]=8'ha0;
-            t[ 72]=8'h52; t[ 73]=8'h3b; t[ 74]=8'hd6; t[ 75]=8'hb3; t[ 76]=8'h29; t[ 77]=8'he3; t[ 78]=8'h2f; t[ 79]=8'h84;
-            t[ 80]=8'h53; t[ 81]=8'hd1; t[ 82]=8'h00; t[ 83]=8'hed; t[ 84]=8'h20; t[ 85]=8'hfc; t[ 86]=8'hb1; t[ 87]=8'h5b;
-            t[ 88]=8'h6a; t[ 89]=8'hcb; t[ 90]=8'hbe; t[ 91]=8'h39; t[ 92]=8'h4a; t[ 93]=8'h4c; t[ 94]=8'h58; t[ 95]=8'hcf;
-            t[ 96]=8'hd0; t[ 97]=8'hef; t[ 98]=8'haa; t[ 99]=8'hfb; t[100]=8'h43; t[101]=8'h4d; t[102]=8'h33; t[103]=8'h85;
-            t[104]=8'h45; t[105]=8'hf9; t[106]=8'h02; t[107]=8'h7f; t[108]=8'h50; t[109]=8'h3c; t[110]=8'h9f; t[111]=8'ha8;
-            t[112]=8'h51; t[113]=8'ha3; t[114]=8'h40; t[115]=8'h8f; t[116]=8'h92; t[117]=8'h9d; t[118]=8'h38; t[119]=8'hf5;
-            t[120]=8'hbc; t[121]=8'hb6; t[122]=8'hda; t[123]=8'h21; t[124]=8'h10; t[125]=8'hff; t[126]=8'hf3; t[127]=8'hd2;
-            t[128]=8'hcd; t[129]=8'h0c; t[130]=8'h13; t[131]=8'hec; t[132]=8'h5f; t[133]=8'h97; t[134]=8'h44; t[135]=8'h17;
-            t[136]=8'hc4; t[137]=8'ha7; t[138]=8'h7e; t[139]=8'h3d; t[140]=8'h64; t[141]=8'h5d; t[142]=8'h19; t[143]=8'h73;
-            t[144]=8'h60; t[145]=8'h81; t[146]=8'h4f; t[147]=8'hdc; t[148]=8'h22; t[149]=8'h2a; t[150]=8'h90; t[151]=8'h88;
-            t[152]=8'h46; t[153]=8'hee; t[154]=8'hb8; t[155]=8'h14; t[156]=8'hde; t[157]=8'h5e; t[158]=8'h0b; t[159]=8'hdb;
-            t[160]=8'he0; t[161]=8'h32; t[162]=8'h3a; t[163]=8'h0a; t[164]=8'h49; t[165]=8'h06; t[166]=8'h24; t[167]=8'h5c;
-            t[168]=8'hc2; t[169]=8'hd3; t[170]=8'hac; t[171]=8'h62; t[172]=8'h91; t[173]=8'h95; t[174]=8'he4; t[175]=8'h79;
-            t[176]=8'he7; t[177]=8'hc8; t[178]=8'h37; t[179]=8'h6d; t[180]=8'h8d; t[181]=8'hd5; t[182]=8'h4e; t[183]=8'ha9;
-            t[184]=8'h6c; t[185]=8'h56; t[186]=8'hf4; t[187]=8'hea; t[188]=8'h65; t[189]=8'h7a; t[190]=8'hae; t[191]=8'h08;
-            t[192]=8'hba; t[193]=8'h78; t[194]=8'h25; t[195]=8'h2e; t[196]=8'h1c; t[197]=8'ha6; t[198]=8'hb4; t[199]=8'hc6;
-            t[200]=8'he8; t[201]=8'hdd; t[202]=8'h74; t[203]=8'h1f; t[204]=8'h4b; t[205]=8'hbd; t[206]=8'h8b; t[207]=8'h8a;
-            t[208]=8'h70; t[209]=8'h3e; t[210]=8'hb5; t[211]=8'h66; t[212]=8'h48; t[213]=8'h03; t[214]=8'hf6; t[215]=8'h0e;
-            t[216]=8'h61; t[217]=8'h35; t[218]=8'h57; t[219]=8'hb9; t[220]=8'h86; t[221]=8'hc1; t[222]=8'h1d; t[223]=8'h9e;
-            t[224]=8'he1; t[225]=8'hf8; t[226]=8'h98; t[227]=8'h11; t[228]=8'h69; t[229]=8'hd9; t[230]=8'h8e; t[231]=8'h94;
-            t[232]=8'h9b; t[233]=8'h1e; t[234]=8'h87; t[235]=8'he9; t[236]=8'hce; t[237]=8'h55; t[238]=8'h28; t[239]=8'hdf;
-            t[240]=8'h8c; t[241]=8'ha1; t[242]=8'h89; t[243]=8'h0d; t[244]=8'hbf; t[245]=8'he6; t[246]=8'h42; t[247]=8'h68;
-            t[248]=8'h41; t[249]=8'h99; t[250]=8'h2d; t[251]=8'h0f; t[252]=8'hb0; t[253]=8'h54; t[254]=8'hbb; t[255]=8'h16;
-            sbox_fwd_task = t[x];
+            case (x)
+                8'h00: sbox_fwd_task = 8'h63; 8'h01: sbox_fwd_task = 8'h7c;
+                8'h02: sbox_fwd_task = 8'h77; 8'h03: sbox_fwd_task = 8'h7b;
+                8'h04: sbox_fwd_task = 8'hf2; 8'h05: sbox_fwd_task = 8'h6b;
+                8'h06: sbox_fwd_task = 8'h6f; 8'h07: sbox_fwd_task = 8'hc5;
+                8'h08: sbox_fwd_task = 8'h30; 8'h09: sbox_fwd_task = 8'h01;
+                8'h0a: sbox_fwd_task = 8'h67; 8'h0b: sbox_fwd_task = 8'h2b;
+                8'h0c: sbox_fwd_task = 8'hfe; 8'h0d: sbox_fwd_task = 8'hd7;
+                8'h0e: sbox_fwd_task = 8'hab; 8'h0f: sbox_fwd_task = 8'h76;
+                8'h10: sbox_fwd_task = 8'hca; 8'h11: sbox_fwd_task = 8'h82;
+                8'h12: sbox_fwd_task = 8'hc9; 8'h13: sbox_fwd_task = 8'h7d;
+                8'h14: sbox_fwd_task = 8'hfa; 8'h15: sbox_fwd_task = 8'h59;
+                8'h16: sbox_fwd_task = 8'h47; 8'h17: sbox_fwd_task = 8'hf0;
+                8'h18: sbox_fwd_task = 8'had; 8'h19: sbox_fwd_task = 8'hd4;
+                8'h1a: sbox_fwd_task = 8'ha2; 8'h1b: sbox_fwd_task = 8'haf;
+                8'h1c: sbox_fwd_task = 8'h9c; 8'h1d: sbox_fwd_task = 8'ha4;
+                8'h1e: sbox_fwd_task = 8'h72; 8'h1f: sbox_fwd_task = 8'hc0;
+                8'h20: sbox_fwd_task = 8'hb7; 8'h21: sbox_fwd_task = 8'hfd;
+                8'h22: sbox_fwd_task = 8'h93; 8'h23: sbox_fwd_task = 8'h26;
+                8'h24: sbox_fwd_task = 8'h36; 8'h25: sbox_fwd_task = 8'h3f;
+                8'h26: sbox_fwd_task = 8'hf7; 8'h27: sbox_fwd_task = 8'hcc;
+                8'h28: sbox_fwd_task = 8'h34; 8'h29: sbox_fwd_task = 8'ha5;
+                8'h2a: sbox_fwd_task = 8'he5; 8'h2b: sbox_fwd_task = 8'hf1;
+                8'h2c: sbox_fwd_task = 8'h71; 8'h2d: sbox_fwd_task = 8'hd8;
+                8'h2e: sbox_fwd_task = 8'h31; 8'h2f: sbox_fwd_task = 8'h15;
+                8'h30: sbox_fwd_task = 8'h04; 8'h31: sbox_fwd_task = 8'hc7;
+                8'h32: sbox_fwd_task = 8'h23; 8'h33: sbox_fwd_task = 8'hc3;
+                8'h34: sbox_fwd_task = 8'h18; 8'h35: sbox_fwd_task = 8'h96;
+                8'h36: sbox_fwd_task = 8'h05; 8'h37: sbox_fwd_task = 8'h9a;
+                8'h38: sbox_fwd_task = 8'h07; 8'h39: sbox_fwd_task = 8'h12;
+                8'h3a: sbox_fwd_task = 8'h80; 8'h3b: sbox_fwd_task = 8'he2;
+                8'h3c: sbox_fwd_task = 8'heb; 8'h3d: sbox_fwd_task = 8'h27;
+                8'h3e: sbox_fwd_task = 8'hb2; 8'h3f: sbox_fwd_task = 8'h75;
+                8'h40: sbox_fwd_task = 8'h09; 8'h41: sbox_fwd_task = 8'h83;
+                8'h42: sbox_fwd_task = 8'h2c; 8'h43: sbox_fwd_task = 8'h1a;
+                8'h44: sbox_fwd_task = 8'h1b; 8'h45: sbox_fwd_task = 8'h6e;
+                8'h46: sbox_fwd_task = 8'h5a; 8'h47: sbox_fwd_task = 8'ha0;
+                8'h48: sbox_fwd_task = 8'h52; 8'h49: sbox_fwd_task = 8'h3b;
+                8'h4a: sbox_fwd_task = 8'hd6; 8'h4b: sbox_fwd_task = 8'hb3;
+                8'h4c: sbox_fwd_task = 8'h29; 8'h4d: sbox_fwd_task = 8'he3;
+                8'h4e: sbox_fwd_task = 8'h2f; 8'h4f: sbox_fwd_task = 8'h84;
+                8'h50: sbox_fwd_task = 8'h53; 8'h51: sbox_fwd_task = 8'hd1;
+                8'h52: sbox_fwd_task = 8'h00; 8'h53: sbox_fwd_task = 8'hed;
+                8'h54: sbox_fwd_task = 8'h20; 8'h55: sbox_fwd_task = 8'hfc;
+                8'h56: sbox_fwd_task = 8'hb1; 8'h57: sbox_fwd_task = 8'h5b;
+                8'h58: sbox_fwd_task = 8'h6a; 8'h59: sbox_fwd_task = 8'hcb;
+                8'h5a: sbox_fwd_task = 8'hbe; 8'h5b: sbox_fwd_task = 8'h39;
+                8'h5c: sbox_fwd_task = 8'h4a; 8'h5d: sbox_fwd_task = 8'h4c;
+                8'h5e: sbox_fwd_task = 8'h58; 8'h5f: sbox_fwd_task = 8'hcf;
+                8'h60: sbox_fwd_task = 8'hd0; 8'h61: sbox_fwd_task = 8'hef;
+                8'h62: sbox_fwd_task = 8'haa; 8'h63: sbox_fwd_task = 8'hfb;
+                8'h64: sbox_fwd_task = 8'h43; 8'h65: sbox_fwd_task = 8'h4d;
+                8'h66: sbox_fwd_task = 8'h33; 8'h67: sbox_fwd_task = 8'h85;
+                8'h68: sbox_fwd_task = 8'h45; 8'h69: sbox_fwd_task = 8'hf9;
+                8'h6a: sbox_fwd_task = 8'h02; 8'h6b: sbox_fwd_task = 8'h7f;
+                8'h6c: sbox_fwd_task = 8'h50; 8'h6d: sbox_fwd_task = 8'h3c;
+                8'h6e: sbox_fwd_task = 8'h9f; 8'h6f: sbox_fwd_task = 8'ha8;
+                8'h70: sbox_fwd_task = 8'h51; 8'h71: sbox_fwd_task = 8'ha3;
+                8'h72: sbox_fwd_task = 8'h40; 8'h73: sbox_fwd_task = 8'h8f;
+                8'h74: sbox_fwd_task = 8'h92; 8'h75: sbox_fwd_task = 8'h9d;
+                8'h76: sbox_fwd_task = 8'h38; 8'h77: sbox_fwd_task = 8'hf5;
+                8'h78: sbox_fwd_task = 8'hbc; 8'h79: sbox_fwd_task = 8'hb6;
+                8'h7a: sbox_fwd_task = 8'hda; 8'h7b: sbox_fwd_task = 8'h21;
+                8'h7c: sbox_fwd_task = 8'h10; 8'h7d: sbox_fwd_task = 8'hff;
+                8'h7e: sbox_fwd_task = 8'hf3; 8'h7f: sbox_fwd_task = 8'hd2;
+                8'h80: sbox_fwd_task = 8'hcd; 8'h81: sbox_fwd_task = 8'h0c;
+                8'h82: sbox_fwd_task = 8'h13; 8'h83: sbox_fwd_task = 8'hec;
+                8'h84: sbox_fwd_task = 8'h5f; 8'h85: sbox_fwd_task = 8'h97;
+                8'h86: sbox_fwd_task = 8'h44; 8'h87: sbox_fwd_task = 8'h17;
+                8'h88: sbox_fwd_task = 8'hc4; 8'h89: sbox_fwd_task = 8'ha7;
+                8'h8a: sbox_fwd_task = 8'h7e; 8'h8b: sbox_fwd_task = 8'h3d;
+                8'h8c: sbox_fwd_task = 8'h64; 8'h8d: sbox_fwd_task = 8'h5d;
+                8'h8e: sbox_fwd_task = 8'h19; 8'h8f: sbox_fwd_task = 8'h73;
+                8'h90: sbox_fwd_task = 8'h60; 8'h91: sbox_fwd_task = 8'h81;
+                8'h92: sbox_fwd_task = 8'h4f; 8'h93: sbox_fwd_task = 8'hdc;
+                8'h94: sbox_fwd_task = 8'h22; 8'h95: sbox_fwd_task = 8'h2a;
+                8'h96: sbox_fwd_task = 8'h90; 8'h97: sbox_fwd_task = 8'h88;
+                8'h98: sbox_fwd_task = 8'h46; 8'h99: sbox_fwd_task = 8'hee;
+                8'h9a: sbox_fwd_task = 8'hb8; 8'h9b: sbox_fwd_task = 8'h14;
+                8'h9c: sbox_fwd_task = 8'hde; 8'h9d: sbox_fwd_task = 8'h5e;
+                8'h9e: sbox_fwd_task = 8'h0b; 8'h9f: sbox_fwd_task = 8'hdb;
+                8'ha0: sbox_fwd_task = 8'he0; 8'ha1: sbox_fwd_task = 8'h32;
+                8'ha2: sbox_fwd_task = 8'h3a; 8'ha3: sbox_fwd_task = 8'h0a;
+                8'ha4: sbox_fwd_task = 8'h49; 8'ha5: sbox_fwd_task = 8'h06;
+                8'ha6: sbox_fwd_task = 8'h24; 8'ha7: sbox_fwd_task = 8'h5c;
+                8'ha8: sbox_fwd_task = 8'hc2; 8'ha9: sbox_fwd_task = 8'hd3;
+                8'haa: sbox_fwd_task = 8'hac; 8'hab: sbox_fwd_task = 8'h62;
+                8'hac: sbox_fwd_task = 8'h91; 8'had: sbox_fwd_task = 8'h95;
+                8'hae: sbox_fwd_task = 8'he4; 8'haf: sbox_fwd_task = 8'h79;
+                8'hb0: sbox_fwd_task = 8'he7; 8'hb1: sbox_fwd_task = 8'hc8;
+                8'hb2: sbox_fwd_task = 8'h37; 8'hb3: sbox_fwd_task = 8'h6d;
+                8'hb4: sbox_fwd_task = 8'h8d; 8'hb5: sbox_fwd_task = 8'hd5;
+                8'hb6: sbox_fwd_task = 8'h4e; 8'hb7: sbox_fwd_task = 8'ha9;
+                8'hb8: sbox_fwd_task = 8'h6c; 8'hb9: sbox_fwd_task = 8'h56;
+                8'hba: sbox_fwd_task = 8'hf4; 8'hbb: sbox_fwd_task = 8'hea;
+                8'hbc: sbox_fwd_task = 8'h65; 8'hbd: sbox_fwd_task = 8'h7a;
+                8'hbe: sbox_fwd_task = 8'hae; 8'hbf: sbox_fwd_task = 8'h08;
+                8'hc0: sbox_fwd_task = 8'hba; 8'hc1: sbox_fwd_task = 8'h78;
+                8'hc2: sbox_fwd_task = 8'h25; 8'hc3: sbox_fwd_task = 8'h2e;
+                8'hc4: sbox_fwd_task = 8'h1c; 8'hc5: sbox_fwd_task = 8'ha6;
+                8'hc6: sbox_fwd_task = 8'hb4; 8'hc7: sbox_fwd_task = 8'hc6;
+                8'hc8: sbox_fwd_task = 8'he8; 8'hc9: sbox_fwd_task = 8'hdd;
+                8'hca: sbox_fwd_task = 8'h74; 8'hcb: sbox_fwd_task = 8'h1f;
+                8'hcc: sbox_fwd_task = 8'h4b; 8'hcd: sbox_fwd_task = 8'hbd;
+                8'hce: sbox_fwd_task = 8'h8b; 8'hcf: sbox_fwd_task = 8'h8a;
+                8'hd0: sbox_fwd_task = 8'h70; 8'hd1: sbox_fwd_task = 8'h3e;
+                8'hd2: sbox_fwd_task = 8'hb5; 8'hd3: sbox_fwd_task = 8'h66;
+                8'hd4: sbox_fwd_task = 8'h48; 8'hd5: sbox_fwd_task = 8'h03;
+                8'hd6: sbox_fwd_task = 8'hf6; 8'hd7: sbox_fwd_task = 8'h0e;
+                8'hd8: sbox_fwd_task = 8'h61; 8'hd9: sbox_fwd_task = 8'h35;
+                8'hda: sbox_fwd_task = 8'h57; 8'hdb: sbox_fwd_task = 8'hb9;
+                8'hdc: sbox_fwd_task = 8'h86; 8'hdd: sbox_fwd_task = 8'hc1;
+                8'hde: sbox_fwd_task = 8'h1d; 8'hdf: sbox_fwd_task = 8'h9e;
+                8'he0: sbox_fwd_task = 8'he1; 8'he1: sbox_fwd_task = 8'hf8;
+                8'he2: sbox_fwd_task = 8'h98; 8'he3: sbox_fwd_task = 8'h11;
+                8'he4: sbox_fwd_task = 8'h69; 8'he5: sbox_fwd_task = 8'hd9;
+                8'he6: sbox_fwd_task = 8'h8e; 8'he7: sbox_fwd_task = 8'h94;
+                8'he8: sbox_fwd_task = 8'h9b; 8'he9: sbox_fwd_task = 8'h1e;
+                8'hea: sbox_fwd_task = 8'h87; 8'heb: sbox_fwd_task = 8'he9;
+                8'hec: sbox_fwd_task = 8'hce; 8'hed: sbox_fwd_task = 8'h55;
+                8'hee: sbox_fwd_task = 8'h28; 8'hef: sbox_fwd_task = 8'hdf;
+                8'hf0: sbox_fwd_task = 8'h8c; 8'hf1: sbox_fwd_task = 8'ha1;
+                8'hf2: sbox_fwd_task = 8'h89; 8'hf3: sbox_fwd_task = 8'h0d;
+                8'hf4: sbox_fwd_task = 8'hbf; 8'hf5: sbox_fwd_task = 8'he6;
+                8'hf6: sbox_fwd_task = 8'h42; 8'hf7: sbox_fwd_task = 8'h68;
+                8'hf8: sbox_fwd_task = 8'h41; 8'hf9: sbox_fwd_task = 8'h99;
+                8'hfa: sbox_fwd_task = 8'h2d; 8'hfb: sbox_fwd_task = 8'h0f;
+                8'hfc: sbox_fwd_task = 8'hb0; 8'hfd: sbox_fwd_task = 8'h54;
+                8'hfe: sbox_fwd_task = 8'hbb; 8'hff: sbox_fwd_task = 8'h16;
+                default: sbox_fwd_task = 8'h00;
+            endcase
         end
     endfunction
 
-    // ---- ShiftRows ----
-    task apply_shift_rows;
-        reg [7:0] tmp;
-        begin
-            // Row 1: shift left by 1
-            tmp = state[1][0]; state[1][0] <= state[1][1]; state[1][1] <= state[1][2];
-            state[1][2] <= state[1][3]; state[1][3] <= tmp;
-            // Row 2: shift left by 2
-            tmp = state[2][0]; state[2][0] <= state[2][2]; state[2][2] <= tmp;
-            tmp = state[2][1]; state[2][1] <= state[2][3]; state[2][3] <= tmp;
-            // Row 3: shift left by 3 (right by 1)
-            tmp = state[3][3]; state[3][3] <= state[3][2]; state[3][2] <= state[3][1];
-            state[3][1] <= state[3][0]; state[3][0] <= tmp;
-        end
-    endtask
+    assign sbox_out[0] = sbox_fwd_task(sbox_in[0]);
+    assign sbox_out[1] = sbox_fwd_task(sbox_in[1]);
+    assign sbox_out[2] = sbox_fwd_task(sbox_in[2]);
+    assign sbox_out[3] = sbox_fwd_task(sbox_in[3]);
 
-    // ---- MixColumns ----
-    task apply_mix_columns;
-        integer mc;
-        reg [7:0] s0,s1,s2,s3;
-        begin
-            for (mc = 0; mc < 4; mc = mc + 1) begin
-                s0 = state[0][mc]; s1 = state[1][mc];
-                s2 = state[2][mc]; s3 = state[3][mc];
-                state[0][mc] <= gfmul(8'h02,s0)^gfmul(8'h03,s1)^s2^s3;
-                state[1][mc] <= s0^gfmul(8'h02,s1)^gfmul(8'h03,s2)^s3;
-                state[2][mc] <= s0^s1^gfmul(8'h02,s2)^gfmul(8'h03,s3);
-                state[3][mc] <= gfmul(8'h03,s0)^s1^s2^gfmul(8'h02,s3);
-            end
-        end
-    endtask
+    assign sbox_in[0] = (phase == STATE_SUBBYTES) ? state[0][loop_cnt] :
+                        (phase == STATE_KEYGEN && keygen_cnt[2:0] == 3'd0) ? w[0][23:16] :
+                        (phase == STATE_KEYGEN && keygen_cnt[2:0] == 3'd4) ? w[0][31:24] :
+                        8'h00;
+    assign sbox_in[1] = (phase == STATE_SUBBYTES) ? state[1][loop_cnt] :
+                        (phase == STATE_KEYGEN && keygen_cnt[2:0] == 3'd0) ? w[0][15:8] :
+                        (phase == STATE_KEYGEN && keygen_cnt[2:0] == 3'd4) ? w[0][23:16] :
+                        8'h00;
+    assign sbox_in[2] = (phase == STATE_SUBBYTES) ? state[2][loop_cnt] :
+                        (phase == STATE_KEYGEN && keygen_cnt[2:0] == 3'd0) ? w[0][7:0] :
+                        (phase == STATE_KEYGEN && keygen_cnt[2:0] == 3'd4) ? w[0][15:8] :
+                        8'h00;
+    assign sbox_in[3] = (phase == STATE_SUBBYTES) ? state[3][loop_cnt] :
+                        (phase == STATE_KEYGEN && keygen_cnt[2:0] == 3'd0) ? w[0][31:24] :
+                        (phase == STATE_KEYGEN && keygen_cnt[2:0] == 3'd4) ? w[0][7:0] :
+                        8'h00;
 
-    // ---- AddRoundKey ----
-    task add_round_key;
-        input [3:0] rnd;
-        integer ar, ac;
-        begin
-            for (ar = 0; ar < 4; ar = ar + 1)
-                for (ac = 0; ac < 4; ac = ac + 1)
-                    state[ar][ac] <= state[ar][ac] ^ rk[rnd][ar][ac];
-        end
-    endtask
+    // ---- Key Expansion Logic ----
+    always @(*) begin
+        if (keygen_cnt[2:0] == 3'd0)
+            new_word = w[7] ^ {sbox_out[0] ^ rcon_val, sbox_out[1], sbox_out[2], sbox_out[3]};
+        else if (keygen_cnt[2:0] == 3'd4)
+            new_word = w[7] ^ {sbox_out[0], sbox_out[1], sbox_out[2], sbox_out[3]};
+        else
+            new_word = w[7] ^ w[0];
+    end
 
-    // ---- Key schedule expansion ----
-    // Expands key[255:0] into 60 words w[0..59]
-    task expand_key;
-        integer ki;
-        reg [31:0] temp;
-        reg [7:0]  b0,b1,b2,b3,rc;
-        begin
-            // Load initial 8 words from key (big-endian)
-            w[0] = key[255:224]; w[1] = key[223:192];
-            w[2] = key[191:160]; w[3] = key[159:128];
-            w[4] = key[127: 96]; w[5] = key[ 95: 64];
-            w[6] = key[ 63: 32]; w[7] = key[ 31:  0];
-
-            rc = 8'h01;
-            for (ki = 8; ki < 60; ki = ki + 1) begin
-                temp = w[ki-1];
-                if (ki % 8 == 0) begin
-                    // RotWord + SubWord + Rcon
-                    temp = {temp[23:0], temp[31:24]};
-                    temp = {sbox_fwd_task(temp[31:24]),
-                            sbox_fwd_task(temp[23:16]),
-                            sbox_fwd_task(temp[15: 8]),
-                            sbox_fwd_task(temp[ 7: 0])};
-                    temp = temp ^ {rc, 24'h000000};
-                    rc = xtime(rc);
-                end else if (ki % 8 == 4) begin
-                    // SubWord only
-                    temp = {sbox_fwd_task(temp[31:24]),
-                            sbox_fwd_task(temp[23:16]),
-                            sbox_fwd_task(temp[15: 8]),
-                            sbox_fwd_task(temp[ 7: 0])};
-                end
-                w[ki] = w[ki-8] ^ temp;
-            end
-
-            // Store into rk[0..14]
-            for (ki = 0; ki < 15; ki = ki + 1) begin
-                // rk[ki][row][col] — col-major, matching FIPS-197
-                rk[ki][0][0] = w[ki*4  ][31:24]; rk[ki][1][0] = w[ki*4  ][23:16];
-                rk[ki][2][0] = w[ki*4  ][15: 8]; rk[ki][3][0] = w[ki*4  ][ 7: 0];
-                rk[ki][0][1] = w[ki*4+1][31:24]; rk[ki][1][1] = w[ki*4+1][23:16];
-                rk[ki][2][1] = w[ki*4+1][15: 8]; rk[ki][3][1] = w[ki*4+1][ 7: 0];
-                rk[ki][0][2] = w[ki*4+2][31:24]; rk[ki][1][2] = w[ki*4+2][23:16];
-                rk[ki][2][2] = w[ki*4+2][15: 8]; rk[ki][3][2] = w[ki*4+2][ 7: 0];
-                rk[ki][0][3] = w[ki*4+3][31:24]; rk[ki][1][3] = w[ki*4+3][23:16];
-                rk[ki][2][3] = w[ki*4+3][15: 8]; rk[ki][3][3] = w[ki*4+3][ 7: 0];
-            end
-        end
-    endtask
-
+    // ---- Main FSM ----
+    integer i;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            phase <= 4'd0;
-            busy  <= 1'b0;
+            phase <= STATE_IDLE;
             done  <= 1'b0;
         end else begin
             done <= 1'b0;
 
             case (phase)
-                4'd0: begin // Idle
+                STATE_IDLE: begin
                     if (load) begin
-                        // Expand key and load plaintext
-                        expand_key();
-                        // Load state from plaintext (col-major / FIPS-197 byte order)
+                        // Load initial 8 words from key (word 0 at w[7], word 7 at w[0])
+                        w[7] <= key[255:224]; w[6] <= key[223:192];
+                        w[5] <= key[191:160]; w[4] <= key[159:128];
+                        w[3] <= key[127: 96]; w[2] <= key[ 95: 64];
+                        w[1] <= key[ 63: 32]; w[0] <= key[ 31:  0];
+                        
+                        // Load state
                         state[0][0] <= plaintext[127:120]; state[1][0] <= plaintext[119:112];
                         state[2][0] <= plaintext[111:104]; state[3][0] <= plaintext[103: 96];
                         state[0][1] <= plaintext[ 95: 88]; state[1][1] <= plaintext[ 87: 80];
@@ -256,29 +249,120 @@ module aes_core (
                         state[2][2] <= plaintext[ 47: 40]; state[3][2] <= plaintext[ 39: 32];
                         state[0][3] <= plaintext[ 31: 24]; state[1][3] <= plaintext[ 23: 16];
                         state[2][3] <= plaintext[ 15:  8]; state[3][3] <= plaintext[  7:  0];
-                        // AddRoundKey with rk[0]
-                        add_round_key(4'd0);
-                        phase <= 4'd1;
+
+                        keygen_cnt <= 6'd8;
+                        rcon_val   <= 8'h01;
+                        phase      <= STATE_KEYGEN;
                     end
                 end
-                4'd1, 4'd2, 4'd3, 4'd4, 4'd5, 4'd6,
-                4'd7, 4'd8, 4'd9, 4'd10, 4'd11, 4'd12, 4'd13: begin
-                    // Rounds 1–13: SubBytes, ShiftRows, MixColumns, AddRoundKey
-                    apply_sub_bytes();
-                    apply_shift_rows();
-                    apply_mix_columns();
-                    add_round_key(phase);
-                    phase <= phase + 4'd1;
+
+                STATE_KEYGEN: begin
+                    // Shift w and insert new word
+                    for (i = 59; i > 0; i = i - 1) w[i] <= w[i-1];
+                    w[0] <= new_word;
+
+                    if (keygen_cnt[2:0] == 3'd0) rcon_val <= xtime(rcon_val);
+                    
+                    if (keygen_cnt == 6'd59) begin
+                        phase <= STATE_INIT_ADDRK;
+                        loop_cnt <= 2'd0;
+                    end
+                    keygen_cnt <= keygen_cnt + 6'd1;
                 end
-                4'd14: begin
-                    // Final round 14: no MixColumns
-                    apply_sub_bytes();
-                    apply_shift_rows();
-                    add_round_key(4'd14);
-                    phase <= 4'd15;
+
+                STATE_INIT_ADDRK: begin
+                    // Round 0: AddRoundKey (one word at a time)
+                    state[0][loop_cnt] <= state[0][loop_cnt] ^ w[59][31:24];
+                    state[1][loop_cnt] <= state[1][loop_cnt] ^ w[59][23:16];
+                    state[2][loop_cnt] <= state[2][loop_cnt] ^ w[59][15: 8];
+                    state[3][loop_cnt] <= state[3][loop_cnt] ^ w[59][ 7: 0];
+                    
+                    // Rotate w by 1
+                    for (i = 59; i > 0; i = i - 1) w[i] <= w[i-1];
+                    w[0] <= w[59];
+
+                    if (loop_cnt == 2'd3) begin
+                        round_cnt <= 4'd1;
+                        loop_cnt  <= 2'd0;
+                        phase     <= STATE_SUBBYTES;
+                    end else begin
+                        loop_cnt <= loop_cnt + 2'd1;
+                    end
                 end
-                4'd15: begin
-                    // Output
+
+                STATE_SUBBYTES: begin
+                    state[0][loop_cnt] <= sbox_out[0];
+                    state[1][loop_cnt] <= sbox_out[1];
+                    state[2][loop_cnt] <= sbox_out[2];
+                    state[3][loop_cnt] <= sbox_out[3];
+                    
+                    if (loop_cnt == 2'd3) begin
+                        phase    <= STATE_SHIFTROWS;
+                        loop_cnt <= 2'd0;
+                    end else begin
+                        loop_cnt <= loop_cnt + 2'd1;
+                    end
+                end
+
+                STATE_SHIFTROWS: begin
+                    // Row 1: shift left by 1
+                    state[1][0] <= state[1][1]; state[1][1] <= state[1][2];
+                    state[1][2] <= state[1][3]; state[1][3] <= state[1][0];
+                    // Row 2: shift left by 2
+                    state[2][0] <= state[2][2]; state[2][2] <= state[2][0];
+                    state[2][1] <= state[2][3]; state[2][3] <= state[2][1];
+                    // Row 3: shift left by 3 (right by 1)
+                    state[3][3] <= state[3][2]; state[3][2] <= state[3][1];
+                    state[3][1] <= state[3][0]; state[3][0] <= state[3][3];
+
+                    if (round_cnt == 4'd14) begin
+                        phase <= STATE_ADDRK;
+                        loop_cnt <= 2'd0;
+                    end else begin
+                        phase <= STATE_MIXCOLUMNS;
+                        loop_cnt <= 2'd0;
+                    end
+                end
+
+                STATE_MIXCOLUMNS: begin
+                    // Use local non-blocking update
+                    state[0][loop_cnt] <= xtime(state[0][loop_cnt]) ^ xtime(state[1][loop_cnt]) ^ state[1][loop_cnt] ^ state[2][loop_cnt] ^ state[3][loop_cnt];
+                    state[1][loop_cnt] <= state[0][loop_cnt] ^ xtime(state[1][loop_cnt]) ^ xtime(state[2][loop_cnt]) ^ state[2][loop_cnt] ^ state[3][loop_cnt];
+                    state[2][loop_cnt] <= state[0][loop_cnt] ^ state[1][loop_cnt] ^ xtime(state[2][loop_cnt]) ^ xtime(state[3][loop_cnt]) ^ state[3][loop_cnt];
+                    state[3][loop_cnt] <= xtime(state[0][loop_cnt]) ^ state[0][loop_cnt] ^ state[1][loop_cnt] ^ state[2][loop_cnt] ^ xtime(state[3][loop_cnt]);
+                    
+                    if (loop_cnt == 2'd3) begin
+                        phase    <= STATE_ADDRK;
+                        loop_cnt <= 2'd0;
+                    end else begin
+                        loop_cnt <= loop_cnt + 2'd1;
+                    end
+                end
+
+                STATE_ADDRK: begin
+                    // AddRoundKey (one word at a time)
+                    state[0][loop_cnt] <= state[0][loop_cnt] ^ w[59][31:24];
+                    state[1][loop_cnt] <= state[1][loop_cnt] ^ w[59][23:16];
+                    state[2][loop_cnt] <= state[2][loop_cnt] ^ w[59][15: 8];
+                    state[3][loop_cnt] <= state[3][loop_cnt] ^ w[59][ 7: 0];
+                    
+                    // Rotate w by 1
+                    for (i = 59; i > 0; i = i - 1) w[i] <= w[i-1];
+                    w[0] <= w[59];
+
+                    if (loop_cnt == 2'd3) begin
+                        if (round_cnt == 4'd14) phase <= STATE_DONE;
+                        else begin
+                            round_cnt <= round_cnt + 4'd1;
+                            loop_cnt  <= 2'd0;
+                            phase     <= STATE_SUBBYTES;
+                        end
+                    end else begin
+                        loop_cnt <= loop_cnt + 2'd1;
+                    end
+                end
+
+                STATE_DONE: begin
                     ciphertext <= {
                         state[0][0], state[1][0], state[2][0], state[3][0],
                         state[0][1], state[1][1], state[2][1], state[3][1],
@@ -286,8 +370,9 @@ module aes_core (
                         state[0][3], state[1][3], state[2][3], state[3][3]
                     };
                     done  <= 1'b1;
-                    phase <= 4'd0;
+                    phase <= STATE_IDLE;
                 end
+                default: phase <= STATE_IDLE;
             endcase
         end
     end

@@ -69,7 +69,6 @@ module aes_gcm_top (
     // AES CTR counter: J0 = IV || 0^31 || 1
     // CB_i = J0 + i  (incrementing only the 32-bit counter)
     reg [127:0] j0;           // base counter block
-    reg [127:0] ctr_block;    // current counter block
     reg  [31:0] ctr_val;      // current counter value
 
     // AES interface
@@ -119,8 +118,10 @@ module aes_gcm_top (
     reg [127:0] keystream_buf;
     reg         ks_valid;
     reg         aad_gh_running;
-    reg         pt_gh_running;
-    reg         len_gh_done;
+
+    // ---- Internal counters ----
+    reg [63:0] aad_processed;
+    reg [63:0] pt_processed;
 
     assign aad_ready = (state == S_AAD) && !aad_gh_running;
 
@@ -134,6 +135,8 @@ module aes_gcm_top (
             ghash_init <= 1'b0;
             ghash_next <= 1'b0;
             ctr_val   <= 32'd0;
+            aad_processed <= 64'd0;
+            pt_processed  <= 64'd0;
         end else begin
             aes_load   <= 1'b0;
             ghash_init <= 1'b0;
@@ -153,6 +156,8 @@ module aes_gcm_top (
                         aes_pt    <= 128'd0;
                         aes_load  <= 1'b1;
                         busy      <= 1'b1;
+                        aad_processed <= 64'd0;
+                        pt_processed  <= 64'd0;
                         state     <= S_HASHKEY_W;
                     end
                 end
@@ -162,7 +167,17 @@ module aes_gcm_top (
                         H <= aes_ct;
                         // Init GHASH accumulator
                         ghash_init <= 1'b1;
-                        state      <= S_AAD;
+                        if (aad_len == 64'd0) begin
+                            state <= S_PT;
+                            ks_valid <= 1'b0;
+                            if (pt_len > 0) begin
+                                aes_pt   <= {iv_reg, 32'd2};
+                                aes_load <= 1'b1;
+                                ctr_val  <= 32'd3;
+                            end
+                        end else begin
+                            state <= S_AAD;
+                        end
                         aad_gh_running <= 1'b0;
                     end
                 end
@@ -172,50 +187,58 @@ module aes_gcm_top (
                         ghash_block    <= aad_block;
                         ghash_next     <= 1'b1;
                         aad_gh_running <= 1'b1;
+                        aad_processed  <= aad_processed + 64'd16;
                     end
                     if (ghash_ready) begin
                         aad_gh_running <= 1'b0;
-                        // Transition when caller signals no more AAD
-                        // (simplified: move to PT after one AAD block; real
-                        //  implementation tracks aad_len counter)
-                        state <= S_PT;
-                        pt_gh_running <= 1'b0;
-                        ks_valid      <= 1'b0;
-                        // Kick first keystream block
-                        aes_pt   <= {iv_reg, ctr_val};
-                        aes_load <= 1'b1;
-                        ctr_val  <= ctr_val + 32'd1;
+                        if (aad_processed >= aad_len) begin
+                            state <= S_PT;
+                            ks_valid <= 1'b0;
+                            if (pt_len > 0) begin
+                                aes_pt   <= {iv_reg, 32'd2};
+                                aes_load <= 1'b1;
+                                ctr_val  <= 32'd3;
+                            end
+                        end
                     end
                 end
 
                 S_PT: begin
-                    if (aes_done && !ks_valid) begin
-                        keystream_buf <= aes_ct;
-                        ks_valid      <= 1'b1;
+                    if (pt_len == 0) begin
+                        state <= S_LEN;
+                    end else begin
+                        if (aes_done && !ks_valid) begin
+                            keystream_buf <= aes_ct;
+                            ks_valid      <= 1'b1;
+                        end
+
+                        if (pt_valid && ks_valid && !ghash_next) begin
+                            ct_block <= pt_block ^ keystream_buf;
+                            ct_valid <= 1'b1;
+                            ks_valid <= 1'b0;
+                            // GHASH the ciphertext block
+                            ghash_block <= pt_block ^ keystream_buf;
+                            ghash_next  <= 1'b1;
+                            pt_processed <= pt_processed + 64'd16;
+                            
+                            if (pt_processed + 64'd16 < pt_len) begin
+                                aes_pt   <= {iv_reg, ctr_val};
+                                aes_load <= 1'b1;
+                                ctr_val  <= ctr_val + 32'd1;
+                            end
+                        end
+
+                        if (ghash_ready && pt_processed >= pt_len) begin
+                            state <= S_LEN;
+                        end
                     end
+                end
 
-                    if (pt_valid && ks_valid) begin
-                        ct_block <= pt_block ^ keystream_buf;
-                        ct_valid <= 1'b1;
-                        ks_valid <= 1'b0;
-
-                        // GHASH the ciphertext block
-                        ghash_block   <= pt_block ^ keystream_buf;
-                        ghash_next    <= 1'b1;
-
-                        // Pre-load next keystream block
-                        aes_pt   <= {iv_reg, ctr_val};
-                        aes_load <= 1'b1;
-                        ctr_val  <= ctr_val + 32'd1;
-                    end
-
-                    // Caller signals no more PT (simplified: single-block)
-                    if (ghash_ready) begin
-                        // Process length block: len(A) || len(C) in bits
-                        ghash_block <= {aad_len << 3, pt_len << 3};
-                        ghash_next  <= 1'b1;
-                        state       <= S_TAG_W;
-                    end
+                S_LEN: begin
+                    // Process length block: len(A) || len(C) in bits
+                    ghash_block <= {aad_len << 3, pt_len << 3};
+                    ghash_next  <= 1'b1;
+                    state       <= S_TAG_W;
                 end
 
                 S_TAG_W: begin
@@ -235,6 +258,8 @@ module aes_gcm_top (
                         state     <= S_IDLE;
                     end
                 end
+
+                default: ; // unused states
             endcase
         end
     end

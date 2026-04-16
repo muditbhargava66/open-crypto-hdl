@@ -16,7 +16,7 @@ from cocotb.triggers import RisingEdge, ClockCycles
 
 async def reset_dut(dut):
     """Apply reset sequence."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     dut.rst_n.value = 0
     dut.init.value = 0
@@ -47,7 +47,7 @@ async def ghash_process_block(dut, block: int) -> int:
         if int(dut.ready.value) == 1:
             return int(dut.result.value)
 
-    raise cocotb.result.TestFailure("GHASH timeout: ready never asserted")
+    assert False,("GHASH timeout: ready never asserted")
 
 
 @cocotb.test()

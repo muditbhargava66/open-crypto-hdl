@@ -29,7 +29,7 @@ DES_VECTORS = [
 @cocotb.test()
 async def test_des_encrypt_vectors(dut):
     """Test DES encryption against NIST KAT vectors."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     dut.rst_n.value = 0
@@ -72,14 +72,14 @@ async def test_des_encrypt_vectors(dut):
         await ClockCycles(dut.clk, 2)  # idle gap
 
     if failures:
-        raise cocotb.result.TestFailure("\n".join(failures))
+        assert False,("\n".join(failures))
     dut._log.info(f"✓ All {len(DES_VECTORS)} DES encrypt vectors PASSED")
 
 
 @cocotb.test()
 async def test_des_decrypt_roundtrip(dut):
     """Encrypt then decrypt — must recover original plaintext."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
 
     dut.rst_n.value = 0
@@ -103,7 +103,7 @@ async def test_des_decrypt_roundtrip(dut):
             ciphertext = int(dut.result.value)
             break
     else:
-        raise cocotb.result.TestFailure("Encrypt timeout")
+        assert False,("Encrypt timeout")
 
     await ClockCycles(dut.clk, 2)
 
@@ -120,7 +120,7 @@ async def test_des_decrypt_roundtrip(dut):
             recovered = int(dut.result.value)
             break
     else:
-        raise cocotb.result.TestFailure("Decrypt timeout")
+        assert False,("Decrypt timeout")
 
     assert recovered == pt_val, (
         f"Roundtrip mismatch: "

@@ -48,7 +48,7 @@ def msg_to_blocks(msg: bytes) -> list:
 
 async def reset_dut(dut):
     """Apply reset sequence."""
-    clock = Clock(dut.clk, 10, units="ns")
+    clock = Clock(dut.clk, 10, unit="ns")
     cocotb.start_soon(clock.start())
     dut.rst_n.value = 0
     dut.init.value = 0
@@ -73,6 +73,14 @@ async def test_rfc8439_poly1305(dut):
     # Process message blocks
     blocks = msg_to_blocks(RFC_MSG)
     for i, (block_val, block_len, is_last) in enumerate(blocks):
+        # Wait for ready
+        for _ in range(200):
+            if int(dut.ready.value) == 1:
+                break
+            await RisingEdge(dut.clk)
+        else:
+            assert False, f"Timeout waiting for ready before block {i}"
+
         dut.block.value = block_val
         dut.block_len.value = block_len
         dut.last_block.value = 1 if is_last else 0
@@ -82,7 +90,7 @@ async def test_rfc8439_poly1305(dut):
 
         if is_last:
             # Wait for tag_valid
-            for _ in range(50):
+            for _ in range(200):
                 await RisingEdge(dut.clk)
                 if int(dut.tag_valid.value) == 1:
                     tag = int(dut.tag.value)
@@ -96,10 +104,11 @@ async def test_rfc8439_poly1305(dut):
                     dut._log.info("✓ RFC 8439 §2.5.2 Poly1305 PASSED")
                     return
 
-            raise cocotb.result.TestFailure("Timeout: tag_valid never asserted")
+            assert False, "Timeout: tag_valid never asserted"
         else:
+            # Wait for block to be absorbed (not strictly necessary if we check ready at top of loop)
             await RisingEdge(dut.clk)
-            dut._log.info(f"  Block [{i}] processed ({block_len} bytes)")
+            dut._log.info(f"  Block [{i}] started processing ({block_len} bytes)")
 
 
 @cocotb.test()
@@ -114,6 +123,7 @@ async def test_single_block(dut):
     dut.init.value = 0
     await RisingEdge(dut.clk)
 
+    assert int(dut.ready.value) == 1
     dut.block.value = 0x0102030405060708090a0b0c0d0e0f10
     dut.block_len.value = 16
     dut.last_block.value = 1
@@ -121,7 +131,7 @@ async def test_single_block(dut):
     await RisingEdge(dut.clk)
     dut.next.value = 0
 
-    for _ in range(50):
+    for _ in range(200):
         await RisingEdge(dut.clk)
         if int(dut.tag_valid.value) == 1:
             tag = int(dut.tag.value)
@@ -129,7 +139,7 @@ async def test_single_block(dut):
             dut._log.info(f"✓ Single-block Poly1305 tag = 0x{tag:032x} PASSED")
             return
 
-    raise cocotb.result.TestFailure("Single-block timeout")
+    assert False, "Single-block timeout"
 
 
 @cocotb.test()
@@ -147,6 +157,7 @@ async def test_zero_message(dut):
     dut.init.value = 0
     await RisingEdge(dut.clk)
 
+    assert int(dut.ready.value) == 1
     # Process a zero block as last
     dut.block.value = 0
     dut.block_len.value = 16
@@ -155,11 +166,11 @@ async def test_zero_message(dut):
     await RisingEdge(dut.clk)
     dut.next.value = 0
 
-    for _ in range(50):
+    for _ in range(200):
         await RisingEdge(dut.clk)
         if int(dut.tag_valid.value) == 1:
             tag = int(dut.tag.value)
             dut._log.info(f"✓ Zero-message tag = 0x{tag:032x} PASSED")
             return
 
-    raise cocotb.result.TestFailure("Zero-message timeout")
+    assert False, "Zero-message timeout"
