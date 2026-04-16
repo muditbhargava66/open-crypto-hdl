@@ -40,8 +40,10 @@ def msg_to_blocks(msg: bytes) -> list:
     blocks = []
     for i in range(0, len(msg), 16):
         chunk = msg[i:i+16]
-        # Convert to integer (little-endian as per Poly1305)
-        val = int.from_bytes(chunk, 'little')
+        # Pad chunk to 16 bytes for consistent signal width
+        padded = chunk + b'\x00' * (16 - len(chunk))
+        # Pack into big-endian integer so chunk[0] is at signal[127:120]
+        val = int.from_bytes(padded, 'big')
         blocks.append((val, len(chunk), i + len(chunk) >= len(msg)))
     return blocks
 
@@ -96,6 +98,8 @@ async def test_rfc8439_poly1305(dut):
                     tag = int(dut.tag.value)
                     dut._log.info(f"Tag got: 0x{tag:032x}")
                     dut._log.info(f"Tag exp: 0x{RFC_TAG:032x}")
+                    # Note: We expect the first byte to match at the MSB of the integer
+                    # because of Big-Endian signal mapping.
                     assert tag == RFC_TAG, (
                         f"RFC 8439 Poly1305 tag mismatch\n"
                         f"  got 0x{tag:032x}\n"
@@ -106,7 +110,7 @@ async def test_rfc8439_poly1305(dut):
 
             assert False, "Timeout: tag_valid never asserted"
         else:
-            # Wait for block to be absorbed (not strictly necessary if we check ready at top of loop)
+            # Wait for block to be absorbed
             await RisingEdge(dut.clk)
             dut._log.info(f"  Block [{i}] started processing ({block_len} bytes)")
 
@@ -170,6 +174,7 @@ async def test_zero_message(dut):
         await RisingEdge(dut.clk)
         if int(dut.tag_valid.value) == 1:
             tag = int(dut.tag.value)
+            assert tag == s_val, f"Zero-message mismatch: got 0x{tag:032x}, exp 0x{s_val:032x}"
             dut._log.info(f"✓ Zero-message tag = 0x{tag:032x} PASSED")
             return
 

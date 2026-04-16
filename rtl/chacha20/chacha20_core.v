@@ -12,11 +12,16 @@ module chacha20_core (
     input  wire         rst_n,
     input  wire [255:0] key,
     input  wire  [95:0] nonce,
-    input  wire  [31:0] counter,
+    input  wire [31:0] counter,
     input  wire         valid_in,
+    // Outputs
     output reg  [511:0] keystream,
     output reg          valid_out
-);
+    `ifdef FORMAL
+    , output wire        f_running,
+    output wire [7:0]   f_step_cnt
+    `endif
+    );
     localparam [31:0] C0 = 32'h61707865;
     localparam [31:0] C1 = 32'h3320646e;
     localparam [31:0] C2 = 32'h79622d32;
@@ -28,7 +33,13 @@ module chacha20_core (
     reg [7:0] step_cnt; // 0..79 (80 QRs total for 20 rounds)
     reg       running;
 
+    `ifdef FORMAL
+    assign f_running = running;
+    assign f_step_cnt = step_cnt;
+    `endif
+
     // Single QR instance
+
     reg  [31:0] qa, qb, qc, qd;
     wire [31:0] qa_next, qb_next, qc_next, qd_next;
     chacha20_qr u_qr (.a_in(qa), .b_in(qb), .c_in(qc), .d_in(qd),

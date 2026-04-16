@@ -133,6 +133,10 @@ coverage.xml
 *.jou
 docs/area_report.txt
 
+# ── ASIC Visualization (Tracked) ─────────────────────────────
+!layout.png
+!layout.svg
+
 # ── sv2v Conversion Output ───────────────────────────────────
 compatible/
 

@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "version": 2
+  },
+  "DESIGN_NAME": "tt_um_crypto_top",
+  "VERILOG_FILES": [
+    "dir::chacha20_qr.v",
+    "dir::chacha20_core.v",
+    "dir::poly1305_core.v",
+    "dir::aes_sbox.v",
+    "dir::aes_core.v",
+    "dir::des_core.v",
+    "dir::tt_um_crypto_top.v"
+  ],
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 20,
+  "DIE_AREA": [0, 0, 460, 172],
+  "PL_TARGET_DENSITY_PCT": 50,
+  "FP_CORE_UTIL": 45,
+  "RT_MAX_LAYER": "met4",
+  "VDD_NETS": ["vccd1"],
+  "GND_NETS": ["vssd1"]
+}

@@ -1,0 +1,30 @@
+{
+  "meta": {
+    "version": 2
+  },
+  "DESIGN_NAME": "tt_um_crypto_top",
+  "VERILOG_FILES": [
+    "dir::tt_um_crypto_top.v",
+    "dir::chacha20_qr.v",
+    "dir::chacha20_core.v",
+    "dir::poly1305_core.v",
+    "dir::aes_sbox.v",
+    "dir::aes_core.v",
+    "dir::des_core.v"
+  ],
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 20,
+  "DIE_AREA": [0, 0, 334.88, 225.76],
+  "PL_TARGET_DENSITY_PCT": 50,
+  "FP_CORE_UTIL": 45,
+  "RT_MAX_LAYER": "met4",
+  "VDD_NETS": [
+    "vccd1"
+  ],
+  "GND_NETS": [
+    "vssd1"
+  ],
+  "FP_DEF_TEMPLATE": "dir::../tt/tech/sky130A/def/tt_block_2x2_pg.def",
+  "VDD_PIN": "VPWR",
+  "GND_PIN": "VGND"
+}

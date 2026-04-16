@@ -1,39 +1,25 @@
 # ============================================================
 # chacha20_formal.sby — SymbiYosys Formal Verification
-# Proves 5 safety properties on the ChaCha20 core.
+# Proves safety properties on the optimized ChaCha20 core.
 #
 # Run: sby -f tb/formal/chacha20_formal.sby
-# Requires: yosys, symbiyosys, yices2
-#   Install: pip install symbiyosys && apt install yices2
 # ============================================================
 
 [options]
 mode bmc
-depth 30
+depth 100
 multiclock off
 
 [engines]
 smtbmc yices
 
 [script]
-# Read all sources with FORMAL define enabled
-read -define FORMAL -formal rtl/chacha20/chacha20_qr.v
-read -define FORMAL -formal rtl/chacha20/chacha20_core.v
-read -define FORMAL -formal rtl/chacha20/chacha20_core_formal.v
+read_verilog -formal chacha20_qr.v
+read_verilog -formal chacha20_core.v
+read_verilog -formal chacha20_core_formal.v
 prep -top chacha20_core_formal
 
 [files]
 rtl/chacha20/chacha20_qr.v
 rtl/chacha20/chacha20_core.v
 rtl/chacha20/chacha20_core_formal.v
-
-# ============================================================
-# Expected outcomes at depth=30:
-#   P1 (valid_out gating):     PROVEN
-#   P2 (round_cnt bounds):     PROVEN
-#   P3 (one-cycle valid_out):  PROVEN
-#   P4 (running blocks start): PROVEN
-#   P5 (monotone round_cnt):   PROVEN
-#   cover(valid_out):          REACHED at step 13
-#   cover(round_cnt==10):      REACHED at step 12
-# ============================================================

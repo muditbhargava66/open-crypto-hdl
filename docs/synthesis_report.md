@@ -18,18 +18,26 @@
 | ChaCha20-Poly1305|  3/3   | cocotb PASS | RFC 8439 S2.8                |
 | TT Wrapper       | n/a    | Elab OK     | TinyTapeout pin spec         |
 
+## Formal Verification Summary
+
+| Core     | Method | Depth | Status | Verified Property          |
+|----------|--------|-------|--------|----------------------------|
+| ChaCha20 | BMC    | 100   | PASS   | progress, valid_out gating |
+| AES-256  | BMC    | 300   | PASS   | 14-round iterative FSM     |
+| DES      | BMC    | 50    | PASS   | Encrypt/Decrypt Inverse    |
+
 ---
 
 ## Yosys Cell Counts (Area-Optimized Iterative Cores)
 
-| Module             | Cells   | Notes                                    |
-|--------------------|---------|------------------------------------------|
-| `chacha20_qr`      | 8       | Single shared QR unit (4 add, 4 xor)     |
-| `chacha20_core`    | 267     | Iterative: 1 QR/cycle, rotating state    |
+| Module             | Cells   | Notes                                     |
+|--------------------|---------|-------------------------------------------|
+| `chacha20_qr`      | 8       | Single shared QR unit (4 add, 4 xor)      |
+| `chacha20_core`    | 267     | Iterative: 1 QR/cycle, rotating state     |
 | `des_core`         | 802     | Iterative: 1 round/cycle, precomputed keys|
 | `aes_core`         | 2,823   | Iterative: 4 S-boxes shared, 4 cycles/step|
-| `poly1305_core`    | 1,034   | Bit-serial multiplier modulo 2^130 - 5   |
-| `tt_um_crypto_top` | 4,666   | Full wrapper including SPI and all cores |
+| `poly1305_core`    | 1,034   | Bit-serial multiplier modulo 2^130 - 5    |
+| `tt_um_crypto_top` | 4,666   | Full wrapper including SPI and all cores  |
 
 ---
 

@@ -20,86 +20,73 @@ project:
   
   tiles: "2x2"           # 2×2 tile for area headroom (AES is large)
 
-  # Input usage
-  ui:
-    - name: result_byte_sel
-      description: "Select which result byte to display on uo_out [3:0]"
-      bits: "3:0"
-    - name: reserved
-      bits: "7:4"
+  top_module: "tt_um_crypto_top"
+  source_files:
+    - "tt_um_crypto_top.v"
+    - "chacha20_qr.v"
+    - "chacha20_core.v"
+    - "poly1305_core.v"
+    - "aes_sbox.v"
+    - "aes_core.v"
+    - "des_core.v"
 
-  # Output usage
-  uo:
-    - name: result_byte
-      description: "Selected result byte (from result register file)"
-      bits: "7:0"
+# Input usage
+pinout:
+  ui[0]: "result_byte_sel[0]"
+  ui[1]: "result_byte_sel[1]"
+  ui[2]: "result_byte_sel[2]"
+  ui[3]: "result_byte_sel[3]"
+  ui[4]: "reserved"
+  ui[5]: "reserved"
+  ui[6]: "reserved"
+  ui[7]: "reserved"
 
-  # Bidirectional (SPI)
-  uio:
-    - name: SCK
-      description: "SPI clock"
-      direction: input
-      bit: 0
-    - name: MOSI
-      description: "SPI master-out slave-in"
-      direction: input
-      bit: 1
-    - name: MISO
-      description: "SPI master-in slave-out"
-      direction: output
-      bit: 2
-    - name: CS_N
-      description: "SPI chip select (active low)"
-      direction: input
-      bit: 3
-    - name: reserved
-      direction: input
-      bits: "7:4"
+  uo[0]: "result_byte[0]"
+  uo[1]: "result_byte[1]"
+  uo[2]: "result_byte[2]"
+  uo[3]: "result_byte[3]"
+  uo[4]: "result_byte[4]"
+  uo[5]: "result_byte[5]"
+  uo[6]: "result_byte[6]"
+  uo[7]: "result_byte[7]"
 
-  # Resources used
-  resources:
-    clock: true
-    reset: true
+  uio[0]: "SCK"
+  uio[1]: "MOSI"
+  uio[2]: "MISO"
+  uio[3]: "CS_N"
+  uio[4]: "reserved"
+  uio[5]: "reserved"
+  uio[6]: "reserved"
+  uio[7]: "reserved"
 
-  # GitHub Actions based flow
-  github_action: tt-gha-ci
+yaml_version: 6
 
-  # Tags for discoverability
-  tags:
-    - crypto
-    - chacha20
-    - aes
-    - des
-    - security
-    - AEAD
-    - SPI
+documentation:
+  how_it_works: |
+    The chip exposes three cipher engines behind a SPI register file.
+    Write the CIPHER_SEL register to choose DES/AES-GCM/ChaCha20.
+    Write key, IV/nonce, and input block bytes via SPI. Assert CMD=START.
+    Poll STATUS until DONE is set, then read result bytes via ui_in selector.
 
-  documentation:
-    how_it_works: |
-      The chip exposes three cipher engines behind a SPI register file.
-      Write the CIPHER_SEL register to choose DES/AES-GCM/ChaCha20.
-      Write key, IV/nonce, and input block bytes via SPI. Assert CMD=START.
-      Poll STATUS until DONE is set, then read result bytes via ui_in selector.
+  how_to_test: |
+    1. Connect SPI master (e.g., RP2040 or logic analyser) to uio[3:0].
+    2. Write 0x00 → 0x01 (select AES-GCM).
+    3. Write 32 key bytes to registers 0x10–0x2F.
+    4. Write 16 plaintext bytes to 0x40–0x4F.
+    5. Write CMD=0x01 to register 0x01.
+    6. Poll register 0x02 until bit 1 (DONE) is set.
+    7. Read result bytes via ui_in[3:0] selector.
+    8. Verify against a software reference (pycryptodome, OpenSSL).
 
-    how_to_test: |
-      1. Connect SPI master (e.g., RP2040 or logic analyser) to uio[3:0].
-      2. Write 0x00 → 0x01 (select AES-GCM).
-      3. Write 32 key bytes to registers 0x10–0x2F.
-      4. Write 16 plaintext bytes to 0x40–0x4F.
-      5. Write CMD=0x01 to register 0x01.
-      6. Poll register 0x02 until bit 1 (DONE) is set.
-      7. Read result bytes via ui_in[3:0] selector.
-      8. Verify against a software reference (pycryptodome, OpenSSL).
+  external_hardware: |
+    - SPI master: RP2040 (Raspberry Pi Pico), Arduino, or FT232H
+    - Optional: logic analyser for SPI inspection
+    - Optional: oscilloscope for clock integrity
 
-    external_hardware: |
-      - SPI master: RP2040 (Raspberry Pi Pico), Arduino, or FT232H
-      - Optional: logic analyser for SPI inspection
-      - Optional: oscilloscope for clock integrity
-
-    references:
-      - "RFC 8439: ChaCha20 and Poly1305 for IETF Protocols"
-      - "FIPS 197: Advanced Encryption Standard (AES)"
-      - "NIST SP 800-38D: GCM Mode of Operation"
-      - "FIPS 46-3: Data Encryption Standard (DES)"
-      - "https://github.com/secworks/aes (reference implementation)"
-      - "https://tinytapeout.com"
+  references:
+    - "RFC 8439: ChaCha20 and Poly1305 for IETF Protocols"
+    - "FIPS 197: Advanced Encryption Standard (AES)"
+    - "NIST SP 800-38D: GCM Mode of Operation"
+    - "FIPS 46-3: Data Encryption Standard (DES)"
+    - "https://github.com/secworks/aes (reference implementation)"
+    - "https://tinytapeout.com"

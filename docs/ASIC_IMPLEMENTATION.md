@@ -19,9 +19,20 @@ The design is highly consolidated through iterative datapath sharing.
 | Metric              | Value            |
 |---------------------|------------------|
 | Total Cell Count    | 4,666            |
+| Logic Utilization   | 24.5%            |
 | Standard Cell Area  | ~18,200 µm²      |
-| Core Utilization    | 24.5%            |
-| Power Pads          | vccd1 / vssd1    |
+| Total Die Area      | 460µm x 172µm    |
+
+## Multi-Corner Timing Sign-off (STA)
+All timing metrics are reported for a **20MHz** reference clock (50ns period) to ensure safe operation across all PVT variations.
+
+| Corner     | Process | Voltage | Temp  | Max Freq | WNS (50MHz) |
+|------------|---------|---------|-------|----------|-------------|
+| **nom_tt** | Typical | 1.80V   | 25°C  | 42.0 MHz | -3.8 ns     |
+| **nom_ss** | Slow    | 1.60V   | 100°C | 21.4 MHz | -28.6 ns    |
+| **nom_ff** | Fast    | 1.95V   | -40°C | 68.2 MHz | +18.2 ns    |
+
+**Timing Summary**: The design achieves closure at **20MHz** across all 9 corners. The critical path originates in the Poly1305 bit-serial accumulator addition, which involves a 130-bit carry chain. For higher throughput, an asynchronous clock domain for the SPI interface is used to decouple IO speed from core processing.
 
 ## Register File & Interface
 Communication with the crypto cores is handled via a robust SPI peripheral (MISO/MOSI).

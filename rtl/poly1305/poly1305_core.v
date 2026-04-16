@@ -65,20 +65,19 @@ module poly1305_core (
     function [129:0] strict_reduce;
         input [130:0] val;
         reg [130:0] v1;
-        /* verilator lint_off UNUSED */
-        reg [130:0] v2;
-        /* verilator lint_on UNUSED */
         begin
             // First pass reduction
             v1 = {1'b0, val[129:0]} + ({130'd0, val[130]} * 3'd5);
-            // Second pass might still be needed if v1 >= 2^130-5
-            if (v1 >= 131'h400000000000000000000000000000005)
-                v2 = v1 - 131'h400000000000000000000000000000005;
+            // Second pass: if v1 >= 2^130-5, subtract 2^130-5
+            // 2^130-5 is 131'h3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFB
+            if (v1 >= 131'h3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFB)
+                strict_reduce = v1 - 131'h3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFB;
             else
-                v2 = v1;
-            strict_reduce = v2[129:0];
+                strict_reduce = v1[129:0];
         end
     endfunction
+
+    wire [127:0] block_le = brevs(block);
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -102,29 +101,29 @@ module poly1305_core (
                         acc <= 131'd0;
                     end else if (next) begin
                         case (block_len)
-                            5'd1:  acc <= acc + {122'd0, 1'b1, block[127:120]};
-                            5'd2:  acc <= acc + {114'd0, 1'b1, block[127:120], block[119:112]};
-                            5'd3:  acc <= acc + {106'd0, 1'b1, block[127:120], block[119:112], block[111:104]};
-                            5'd4:  acc <= acc + {98'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96]};
-                            5'd5:  acc <= acc + {90'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88]};
-                            5'd6:  acc <= acc + {82'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80]};
-                            5'd7:  acc <= acc + {74'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80], block[79:72]};
-                            5'd8:  acc <= acc + {66'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80], block[79:72], block[71:64]};
-                            5'd9:  acc <= acc + {58'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80], block[79:72], block[71:64], block[63:56]};
-                            5'd10: acc <= acc + {50'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80], block[79:72], block[71:64], block[63:56], block[55:48]};
-                            5'd11: acc <= acc + {42'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80], block[79:72], block[71:64], block[63:56], block[55:48], block[47:40]};
-                            5'd12: acc <= acc + {34'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80], block[79:72], block[71:64], block[63:56], block[55:48], block[47:40], block[39:32]};
-                            5'd13: acc <= acc + {26'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80], block[79:72], block[71:64], block[63:56], block[55:48], block[47:40], block[39:32], block[31:24]};
-                            5'd14: acc <= acc + {18'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80], block[79:72], block[71:64], block[63:56], block[55:48], block[47:40], block[39:32], block[31:24], block[23:16]};
-                            5'd15: acc <= acc + {10'd0,  1'b1, block[127:120], block[119:112], block[111:104], block[103:96], block[95:88], block[87:80], block[79:72], block[71:64], block[63:56], block[55:48], block[47:40], block[39:32], block[31:24], block[23:16], block[15:8]};
-                            5'd16: acc <= acc + {2'b0,   1'b1, brevs(block)};
-                            default: acc <= acc + {2'b0, 1'b1, brevs(block)};
+                            5'd1:  acc <= acc + {122'd1, block_le[7:0]};
+                            5'd2:  acc <= acc + {114'd1, block_le[15:0]};
+                            5'd3:  acc <= acc + {106'd1, block_le[23:0]};
+                            5'd4:  acc <= acc + {98'd1,  block_le[31:0]};
+                            5'd5:  acc <= acc + {90'd1,  block_le[39:0]};
+                            5'd6:  acc <= acc + {82'd1,  block_le[47:0]};
+                            5'd7:  acc <= acc + {74'd1,  block_le[55:0]};
+                            5'd8:  acc <= acc + {66'd1,  block_le[63:0]};
+                            5'd9:  acc <= acc + {58'd1,  block_le[71:0]};
+                            5'd10: acc <= acc + {50'd1,  block_le[79:0]};
+                            5'd11: acc <= acc + {42'd1,  block_le[87:0]};
+                            5'd12: acc <= acc + {34'd1,  block_le[95:0]};
+                            5'd13: acc <= acc + {26'd1,  block_le[103:0]};
+                            5'd14: acc <= acc + {18'd1,  block_le[111:0]};
+                            5'd15: acc <= acc + {10'd1,  block_le[119:0]};
+                            5'd16: acc <= acc + {2'b0,   1'b1, block_le[127:0]};
+                            default: acc <= acc + {2'b0, 1'b1, block_le[127:0]};
                         endcase
                         state   <= S_PRE_MULT;
                     end
                 end
                 S_PRE_MULT: begin
-                    mult_a <= reduce130({1'b0, acc});
+                    mult_a <= {1'b0, strict_reduce(acc)};
                     mult_b <= r;
                     mult_p <= 131'd0;
                     bit_cnt <= 8'd0;
@@ -143,7 +142,7 @@ module poly1305_core (
                     acc <= mult_p;
                     if (last_block) begin
                         /* verilator lint_off WIDTH */
-                        tag       <= strict_reduce(mult_p) + s;
+                        tag       <= brevs(strict_reduce(mult_p) + s);
                         /* verilator lint_on WIDTH */
                         tag_valid <= 1'b1;
                     end

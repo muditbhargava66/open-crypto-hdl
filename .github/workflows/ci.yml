@@ -141,18 +141,17 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify tools installed
-        run: |
-          yosys --version
-          sby --version
-
       - name: Run ChaCha20 BMC
-        run: sby -f tb/formal/chacha20_formal.sby
-        continue-on-error: true
+        run: make formal-chacha
+
+      - name: Run AES BMC
+        run: sby -f tb/formal/aes_formal.sby
 
       - name: Upload formal results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: formal-results
-          path: chacha20_formal/
+          path: |
+            tb/formal/chacha20_formal/
+            tb/formal/aes_formal/

@@ -259,13 +259,25 @@ formal-chacha:
 	$(SBY) -f tb/formal/chacha20_formal.sby
 
 # ============================================================
-# TINYTAPEOUT / OpenLane
+# TINYTAPEOUT & ASIC FLOW
 # ============================================================
-.PHONY: tt-harden tt-lint
+.PHONY: tt-harden tt-png tt-klayout tt-lint
 
 tt-harden:
-	@echo "==> Hardening TT design with OpenLane2..."
-	openlane syn/openlane/config.json
+	./tt/tt_tool.py --create-user-config
+	./tt/tt_tool.py --harden
+
+tt-png:
+	mkdir -p runs/wokwi/final/gds/
+	ln -sf $$(pwd)/runs/wokwi/*-klayout-streamout/*.klayout.gds runs/wokwi/final/gds/tt_um_crypto_top.gds
+	./tt/tt_tool.py --create-png
+	./tt/tt_tool.py --create-svg
+	mv gds_render.png layout.png
+	mv gds_render_preview.svg layout.svg
+	rm -f gds_render_preview.png gds_render.svg
+
+tt-klayout:
+	./tt/tt_tool.py --open-in-klayout
 
 tt-lint:
 	@echo "==> TinyTapeout compliance check..."
@@ -305,11 +317,27 @@ clean:
 	rm -rf $(BUILD)/ sim_build/ __pycache__ *.vcd *.fst results.xml
 	find . -name "*.pyc" -delete
 	find . -name "*.log" -delete
-	@echo "Build artifacts cleaned"
+	mkdir -p runs/wokwi/final/gds/
+	ln -sf $$(pwd)/runs/wokwi/57-klayout-streamout/*.klayout.gds runs/wokwi/final/gds/tt_um_crypto_top.gds
+	./tt/tt_tool.py --create-png
+	./tt/tt_tool.py --create-svg
+	mv gds_render.png layout.png
+	mv gds_render_preview.svg layout.svg
+	rm -f gds_render_preview.png gds_render.svg
 
-distclean: clean
-	rm -rf chacha20_formal/ formal_results/
-	@echo "All generated files removed"
+# ============================================================
+# WAVEFORM VIEWING
+# ============================================================
+.PHONY: waves-chacha waves-des waves-aes
+
+waves-chacha: 
+	gtkwave tb_chacha20.vcd
+
+waves-des:
+	gtkwave tb_des.vcd
+
+waves-aes:
+	gtkwave tb_aes.vcd
 
 # ============================================================
 # HELP

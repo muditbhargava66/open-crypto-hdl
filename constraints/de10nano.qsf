@@ -23,6 +23,7 @@ set_global_assignment -name VERILOG_FILE ../../rtl/chacha20/chacha20_core.v
 set_global_assignment -name VERILOG_FILE ../../rtl/aes/aes_sbox.v
 set_global_assignment -name VERILOG_FILE ../../rtl/aes/aes_core.v
 set_global_assignment -name VERILOG_FILE ../../rtl/des/des_core.v
+set_global_assignment -name VERILOG_FILE ../../rtl/poly1305/poly1305_core.v
 set_global_assignment -name VERILOG_FILE ../../rtl/tt_wrapper/tt_um_crypto_top.v
 
 # ── Clock (DE10-Nano 50 MHz on-board) ────────────────────────────────────────
