@@ -718,13 +718,11 @@ module des_core (
     // ============================================================
     function [4:0] rot_amt;
         input [3:0] rnd; // 0-based round index
-        reg [4:0] t [0:15];
         begin
-            t[ 0]=5'd1; t[ 1]=5'd1; t[ 2]=5'd2; t[ 3]=5'd2;
-            t[ 4]=5'd2; t[ 5]=5'd2; t[ 6]=5'd2; t[ 7]=5'd2;
-            t[ 8]=5'd1; t[ 9]=5'd2; t[10]=5'd2; t[11]=5'd2;
-            t[12]=5'd2; t[13]=5'd2; t[14]=5'd2; t[15]=5'd1;
-            rot_amt = t[rnd];
+            case (rnd)
+                4'd0, 4'd1, 4'd8, 4'd15: rot_amt = 5'd1;
+                default:                  rot_amt = 5'd2;
+            endcase
         end
     endfunction
 
@@ -758,10 +756,7 @@ module des_core (
     /* verilator lint_on BLKSEQ */
 
     // Temporaries for FSM
-    reg  [63:0] ip_out_tmp;
-    reg   [3:0] sk_idx_tmp;
-    reg  [31:0] f_out_tmp;
-    reg  [31:0] new_R_tmp;
+    reg [63:0] ip_tmp;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -775,9 +770,11 @@ module des_core (
                     if (load) begin
                         gen_subkeys();
                         enc_reg    <= encrypt;
-                        ip_out_tmp = ip(block);
-                        L          <= ip_out_tmp[63:32];
-                        R          <= ip_out_tmp[31: 0];
+                        /* verilator lint_off BLKSEQ */
+                        ip_tmp      = ip(block);
+                        /* verilator lint_on BLKSEQ */
+                        L          <= ip_tmp[63:32];
+                        R          <= ip_tmp[31:0];
                         rnd_cnt    <= 4'd0;
                         phase      <= 4'd3; // New state: wait for subkeys
                     end

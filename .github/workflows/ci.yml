@@ -24,26 +24,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y verilator
 
-      - name: Lint ChaCha20
-        run: |
-          verilator --lint-only -Wall \
-            rtl/chacha20/chacha20_qr.v \
-            rtl/chacha20/chacha20_core.v
-
-      - name: Lint DES
-        run: verilator --lint-only -Wall rtl/des/des_core.v
-
-      - name: Lint AES
-        run: |
-          verilator --lint-only -Wall \
-            rtl/aes/aes_sbox.v \
-            rtl/aes/aes_core.v
-
-      - name: Lint GCM
-        run: |
-          verilator --lint-only -Wall \
-            rtl/gcm/gf128_mul.v \
-            rtl/gcm/ghash_core.v
+      - name: Run make lint
+        run: make lint
 
   # ─────────────────────────────────────────────────────────
   simulate-cocotb:
@@ -62,33 +44,10 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y iverilog
-          pip install cocotb cocotb-test pytest
+          pip install cocotb cocotb-test pytest pycryptodome
 
-      - name: Simulate ChaCha20
-        run: |
-          export TOPLEVEL=chacha20_core
-          export MODULE=tb.cocotb.test_chacha20
-          export VERILOG_SOURCES="rtl/chacha20/chacha20_qr.v rtl/chacha20/chacha20_core.v"
-          export SIM=icarus
-          make -f "$(cocotb-config --makefiles)/Makefile.sim"
-
-      - name: Simulate DES
-        run: |
-          rm -rf sim_build results.xml
-          export TOPLEVEL=des_core
-          export MODULE=tb.cocotb.test_des
-          export VERILOG_SOURCES="rtl/des/des_core.v"
-          export SIM=icarus
-          make -f "$(cocotb-config --makefiles)/Makefile.sim"
-
-      - name: Simulate AES
-        run: |
-          rm -rf sim_build results.xml
-          export TOPLEVEL=aes_core
-          export MODULE=tb.cocotb.test_aes
-          export VERILOG_SOURCES="rtl/aes/aes_sbox.v rtl/aes/aes_core.v"
-          export SIM=icarus
-          make -f "$(cocotb-config --makefiles)/Makefile.sim"
+      - name: Run all cocotb tests
+        run: make cocotb-all
 
       - name: Upload simulation logs
         if: always()
@@ -113,43 +72,14 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y yosys
 
-      - name: Synthesize ChaCha20
-        run: |
-          yosys -p "
-            read_verilog rtl/chacha20/chacha20_qr.v rtl/chacha20/chacha20_core.v;
-            synth -top chacha20_core -flatten;
-            stat;
-          " 2>&1 | tee build_chacha20.log
-
-      - name: Synthesize DES
-        run: |
-          yosys -p "
-            read_verilog rtl/des/des_core.v;
-            synth -top des_core -flatten;
-            stat;
-          " 2>&1 | tee build_des.log
-
-      - name: Synthesize AES-256
-        run: |
-          yosys -p "
-            read_verilog rtl/aes/aes_sbox.v rtl/aes/aes_core.v;
-            synth -top aes_core -flatten;
-            stat;
-          " 2>&1 | tee build_aes.log
-
-      - name: Synthesize GF128 multiplier
-        run: |
-          yosys -p "
-            read_verilog rtl/gcm/gf128_mul.v;
-            synth -top gf128_mul -flatten;
-            stat;
-          " 2>&1 | tee build_gf128.log
+      - name: Run make synth-all
+        run: make synth-all
 
       - name: Upload synthesis reports
         uses: actions/upload-artifact@v4
         with:
-          name: synth-reports
-          path: "*.log"
+          name: synth-netlists
+          path: "build/*_netlist.v"
 
   # ─────────────────────────────────────────────────────────
   sv2v-check:
@@ -171,10 +101,10 @@ jobs:
         run: |
           mkdir -p compatible
           sv2v rtl/chacha20/chacha20_qr.v rtl/chacha20/chacha20_core.v \
-            -w compatible/
+            -w compatible/chacha20_core.v
 
       - name: Verify converted Verilog lints
-        run: verilator --lint-only -Wall compatible/
+        run: verilator --lint-only -Wall compatible/chacha20_core.v
 
   # ─────────────────────────────────────────────────────────
   tinytapeout-check:
@@ -190,24 +120,10 @@ jobs:
           sudo apt-get install -y yosys
 
       - name: Elaborate TT wrapper
-        run: |
-          yosys -p "
-            read_verilog \
-              rtl/chacha20/chacha20_qr.v \
-              rtl/chacha20/chacha20_core.v \
-              rtl/aes/aes_sbox.v \
-              rtl/aes/aes_core.v \
-              rtl/des/des_core.v \
-              rtl/tt_wrapper/tt_um_crypto_top.v;
-            synth -top tt_um_crypto_top -flatten;
-            stat;
-          " 2>&1 | tee tt_synth.log
-          grep -q "Printing statistics" tt_synth.log || exit 1
+        run: make synth-tt
 
       - name: Check pin compliance
         run: |
-          # TinyTapeout requires: ui_in[7:0], uo_out[7:0],
-          # uio_in/out/oe[7:0], ena, clk, rst_n
           grep -E "ui_in|uo_out|uio_in|uio_out|uio_oe|ena|clk|rst_n" \
             rtl/tt_wrapper/tt_um_crypto_top.v | head -20
 
@@ -232,7 +148,7 @@ jobs:
 
       - name: Run ChaCha20 BMC
         run: sby -f tb/formal/chacha20_formal.sby
-        continue-on-error: true   # formal is informational
+        continue-on-error: true
 
       - name: Upload formal results
         if: always()

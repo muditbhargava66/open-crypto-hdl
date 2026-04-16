@@ -216,6 +216,27 @@ module tt_um_crypto_top (
         .valid_out(chacha_done)
     );
 
+    wire [127:0] poly_tag;
+    wire         poly_done;
+    reg          poly_load;
+    reg          poly_init;
+
+    poly1305_core u_poly (
+        .clk        (clk),
+        .rst_n      (rst_n),
+        .key        (aes_key), // reuse aes_key for r||s
+        .init       (poly_init),
+        .block      (aes_pt),  // reuse aes_pt bus
+        .block_len  (5'd16),
+        .last_block (1'b1),
+        .next       (poly_load),
+        .tag        (poly_tag),
+        .tag_valid  (poly_done),
+        /* verilator lint_off PINCONNECTEMPTY */
+        .ready      ()
+        /* verilator lint_on PINCONNECTEMPTY */
+    );
+
     // ---- FSM ----
     reg [2:0] fsm;
     localparam FSM_IDLE   = 3'd0;
@@ -231,6 +252,8 @@ module tt_um_crypto_top (
             des_load     <= 1'b0;
             aes_load     <= 1'b0;
             chacha_load  <= 1'b0;
+            poly_load    <= 1'b0;
+            poly_init    <= 1'b0;
             des_encrypt_r <= 1'b1;
             status_reg   <= 8'h00;
             fsm          <= FSM_IDLE;
@@ -244,6 +267,8 @@ module tt_um_crypto_top (
             des_load    <= 1'b0;
             aes_load    <= 1'b0;
             chacha_load <= 1'b0;
+            poly_load   <= 1'b0;
+            poly_init   <= 1'b0;
 
             // ---- SPI register write ----
             if (spi_done && !spi_rw) begin
@@ -252,6 +277,7 @@ module tt_um_crypto_top (
                     8'h00: cipher_sel     <= spi_data[1:0];
                     8'h01: begin
                         if (spi_data == 8'h01) cmd_start <= 1'b1;
+                        if (spi_data == 8'h04) poly_init <= 1'b1;
                         if (spi_data == 8'h02) begin
                             fsm        <= FSM_IDLE;
                             status_reg <= 8'h00;
@@ -280,7 +306,7 @@ module tt_um_crypto_top (
                                 chacha_ctr  <= {block_bytes[0],block_bytes[1],
                                                 block_bytes[2],block_bytes[3]};
                             end
-                            default: ; // unsupported cipher
+                            2'd3: poly_load   <= 1'b1;
                         endcase
                         fsm <= FSM_WAIT;
                     end
@@ -312,6 +338,13 @@ module tt_um_crypto_top (
                              result_bytes[8],result_bytes[9],result_bytes[10],result_bytes[11],
                              result_bytes[12],result_bytes[13],result_bytes[14],result_bytes[15]}
                                 <= chacha_ks[511:384];
+                            fsm <= FSM_DONE;
+                        end
+                        2'd3: if (poly_done) begin
+                            {tag_bytes[0],tag_bytes[1],tag_bytes[2],tag_bytes[3],
+                             tag_bytes[4],tag_bytes[5],tag_bytes[6],tag_bytes[7],
+                             tag_bytes[8],tag_bytes[9],tag_bytes[10],tag_bytes[11],
+                             tag_bytes[12],tag_bytes[13],tag_bytes[14],tag_bytes[15]} <= poly_tag;
                             fsm <= FSM_DONE;
                         end
                         default: ;

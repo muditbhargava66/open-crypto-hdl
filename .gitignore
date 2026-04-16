@@ -131,6 +131,7 @@ coverage.xml
 # ── Logs ─────────────────────────────────────────────────────
 *.log
 *.jou
+docs/area_report.txt
 
 # ── sv2v Conversion Output ───────────────────────────────────
 compatible/

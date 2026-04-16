@@ -125,6 +125,41 @@ module aes_gcm_top (
 
     assign aad_ready = (state == S_AAD) && !aad_gh_running;
 
+    // ---- Byte Masking ----
+    function [127:0] mask_block;
+        input [127:0] data;
+        input [63:0] processed;
+        input [63:0] total;
+        /* verilator lint_off UNUSED */
+        reg [63:0] diff;
+        /* verilator lint_on UNUSED */
+        begin
+            if (processed + 16 <= total) begin
+                mask_block = data;
+            end else begin
+                diff = total - processed;
+                case (diff[3:0])
+                    4'd1:  mask_block = data & 128'hFF000000000000000000000000000000;
+                    4'd2:  mask_block = data & 128'hFFFF0000000000000000000000000000;
+                    4'd3:  mask_block = data & 128'hFFFFFF00000000000000000000000000;
+                    4'd4:  mask_block = data & 128'hFFFFFFFF000000000000000000000000;
+                    4'd5:  mask_block = data & 128'hFFFFFFFFFF0000000000000000000000;
+                    4'd6:  mask_block = data & 128'hFFFFFFFFFFFF00000000000000000000;
+                    4'd7:  mask_block = data & 128'hFFFFFFFFFFFFFF000000000000000000;
+                    4'd8:  mask_block = data & 128'hFFFFFFFFFFFFFFFF0000000000000000;
+                    4'd9:  mask_block = data & 128'hFFFFFFFFFFFFFFFFFF00000000000000;
+                    4'd10: mask_block = data & 128'hFFFFFFFFFFFFFFFFFFFF000000000000;
+                    4'd11: mask_block = data & 128'hFFFFFFFFFFFFFFFFFFFFFF0000000000;
+                    4'd12: mask_block = data & 128'hFFFFFFFFFFFFFFFFFFFFFFFF00000000;
+                    4'd13: mask_block = data & 128'hFFFFFFFFFFFFFFFFFFFFFFFFFF000000;
+                    4'd14: mask_block = data & 128'hFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000;
+                    4'd15: mask_block = data & 128'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00;
+                    default: mask_block = 128'd0;
+                endcase
+            end
+        end
+    endfunction
+
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state     <= S_IDLE;
@@ -184,7 +219,7 @@ module aes_gcm_top (
 
                 S_AAD: begin
                     if (aad_valid && !aad_gh_running) begin
-                        ghash_block    <= aad_block;
+                        ghash_block    <= mask_block(aad_block, aad_processed, aad_len);
                         ghash_next     <= 1'b1;
                         aad_gh_running <= 1'b1;
                         aad_processed  <= aad_processed + 64'd16;
@@ -213,11 +248,11 @@ module aes_gcm_top (
                         end
 
                         if (pt_valid && ks_valid && !ghash_next) begin
-                            ct_block <= pt_block ^ keystream_buf;
+                            ct_block <= mask_block(pt_block ^ keystream_buf, pt_processed, pt_len);
                             ct_valid <= 1'b1;
                             ks_valid <= 1'b0;
-                            // GHASH the ciphertext block
-                            ghash_block <= pt_block ^ keystream_buf;
+                            // GHASH the masked ciphertext block
+                            ghash_block <= mask_block(pt_block ^ keystream_buf, pt_processed, pt_len);
                             ghash_next  <= 1'b1;
                             pt_processed <= pt_processed + 64'd16;
                             

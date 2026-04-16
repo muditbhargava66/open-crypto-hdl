@@ -21,7 +21,7 @@ GCM_SRCS     = rtl/gcm/gf128_mul.v rtl/gcm/ghash_core.v
 AES_GCM_SRCS = $(AES_SRCS) $(GCM_SRCS) rtl/aes_gcm/aes_gcm_top.v
 DES_SRCS     = rtl/des/des_core.v
 TDES_SRCS    = $(DES_SRCS) rtl/des/tdes_core.v
-TT_SRCS      = $(CHACHA_SRCS) $(AES_SRCS) $(DES_SRCS) rtl/tt_wrapper/tt_um_crypto_top.v
+TT_SRCS      = $(CHACHA_SRCS) $(AES_SRCS) $(DES_SRCS) $(POLY_SRCS) rtl/tt_wrapper/tt_um_crypto_top.v
 FORMAL_SRCS  = $(CHACHA_SRCS) rtl/chacha20/chacha20_core_formal.v
 
 # ---- Build directory ----
