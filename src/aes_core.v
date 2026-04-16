@@ -18,6 +18,9 @@ module aes_core (
     input  wire         load,
     output reg  [127:0] ciphertext,
     output reg          done
+`ifdef FORMAL
+    , output wire [2:0]   f_phase
+`endif
 );
     // ---- GF(2^8) multiply by 2 (xtime) ----
     function [7:0] xtime;
@@ -42,6 +45,10 @@ module aes_core (
     localparam STATE_DONE         = 3'd7;
 
     reg [2:0] phase;
+
+`ifdef FORMAL
+    assign f_phase = phase;
+`endif
     reg [5:0] keygen_cnt;
     reg [3:0] round_cnt;
     reg [1:0] loop_cnt; // Replaces subbytes_cnt, used for 4-cycle steps

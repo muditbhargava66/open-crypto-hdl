@@ -34,31 +34,39 @@ from typing import Optional
 
 
 # ── Register map ──────────────────────────────────────────────────────────────
-REG_CIPHER_SEL  = 0x00   # [1:0] 00=DES 01=AES-GCM 10=ChaCha20
-REG_CMD         = 0x01   # write 0x01=start, 0x02=reset
+REG_CIPHER_SEL  = 0x00   # [2:0] 0=DES 1=AES 2=ChaCha 3=Poly 4=GCM 5=C20P; [3] direction
+REG_CMD         = 0x01   # write 0x01=start, 0x02=reset, 0x04=poly_init, 0x08=next_block
 REG_STATUS      = 0x02   # [0]=busy [1]=done
+REG_AAD_LEN     = 0x04   # 4 bytes
+REG_PT_LEN      = 0x08   # 4 bytes
 REG_KEY_BASE    = 0x10   # KEY bytes 0-31
 REG_IV_BASE     = 0x30   # IV/Nonce bytes 0-11
 REG_BLOCK_BASE  = 0x40   # Input block bytes 0-15
 REG_RESULT_BASE = 0x50   # Result bytes 0-15 (read only)
 REG_TAG_BASE    = 0x60   # Authentication tag 0-15 (read only)
 
-CMD_START = 0x01
-CMD_RESET = 0x02
+CMD_START     = 0x01
+CMD_RESET     = 0x02
+CMD_POLY_INIT = 0x04
+CMD_AEAD_NEXT = 0x08
 
 STATUS_BUSY = 0x01
 STATUS_DONE = 0x02
 
-CIPHER_DES     = 0x00
-CIPHER_AES_GCM = 0x01
-CIPHER_CHACHA20 = 0x02
+CIPHER_DES         = 0x00
+CIPHER_AES         = 0x01
+CIPHER_CHACHA20    = 0x02
+CIPHER_POLY1305    = 0x03
+CIPHER_AES_GCM     = 0x04
+CIPHER_CHACHA_POLY = 0x05
 
 CIPHER_NAMES = {
-    'des':      CIPHER_DES,
-    'aes':      CIPHER_AES_GCM,
-    'aes-gcm':  CIPHER_AES_GCM,
-    'chacha20': CIPHER_CHACHA20,
-    'chacha':   CIPHER_CHACHA20,
+    'des':         CIPHER_DES,
+    'aes':         CIPHER_AES,
+    'chacha20':    CIPHER_CHACHA20,
+    'poly1305':    CIPHER_POLY1305,
+    'aes-gcm':     CIPHER_AES_GCM,
+    'chacha-poly': CIPHER_CHACHA_POLY,
 }
 
 
@@ -213,12 +221,25 @@ class CryptoChip:
         self.write_reg(REG_CMD, CMD_RESET)
         time.sleep(0.001)
 
-    def select_cipher(self, cipher: str):
-        """Select cipher: 'des', 'aes', 'aes-gcm', or 'chacha20'."""
+    def select_cipher(self, cipher: str, encrypt: bool = True):
+        """Select cipher: 'des', 'aes', 'chacha20', 'poly1305', 'aes-gcm', or 'chacha-poly'."""
         sel = CIPHER_NAMES.get(cipher.lower())
         if sel is None:
             raise ValueError(f"Unknown cipher '{cipher}'. Choose: {list(CIPHER_NAMES)}")
+        if encrypt:
+            sel |= 0x08  # set bit 3 for encryption/direction
         self.write_reg(REG_CIPHER_SEL, sel)
+
+    def set_aead_lengths(self, aad_len: int, pt_len: int):
+        """Set lengths for AEAD operations (32-bit big-endian)."""
+        self.write_bytes(REG_AAD_LEN, struct.pack('>I', aad_len))
+        self.write_bytes(REG_PT_LEN,  struct.pack('>I', pt_len))
+
+    def aead_next_block(self, block: bytes):
+        """Feed next AAD or PT block to the AEAD core."""
+        self.set_block(block)
+        self.write_reg(REG_CMD, CMD_AEAD_NEXT)
+        self.wait_done()
 
     def set_key(self, key: bytes):
         """
@@ -283,6 +304,46 @@ class CryptoChip:
         return self.read_bytes(REG_TAG_BASE, 16)
 
     # ── Convenience one-shot operations ──────────────────────────────────────
+    def aes_gcm_encrypt(self, key: bytes, iv: bytes, aad: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
+        """Authenticated Encryption via AES-256-GCM."""
+        self.reset()
+        self.set_aead_lengths(len(aad), len(plaintext))
+        self.select_cipher('aes-gcm', encrypt=True)
+        self.set_key(key)
+        self.set_nonce(iv)
+        self.start()
+        
+        ciphertext = bytearray()
+        # Feed AAD
+        for i in range(0, len(aad), 16):
+            self.aead_next_block(aad[i:i+16])
+        # Feed Plaintext
+        for i in range(0, len(plaintext), 16):
+            self.aead_next_block(plaintext[i:i+16])
+            ciphertext.extend(self.read_result(min(16, len(plaintext)-i)))
+            
+        return bytes(ciphertext), self.read_tag()
+
+    def chacha_poly_encrypt(self, key: bytes, iv: bytes, aad: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
+        """Authenticated Encryption via ChaCha20-Poly1305."""
+        self.reset()
+        self.set_aead_lengths(len(aad), len(plaintext))
+        self.select_cipher('chacha-poly', encrypt=True)
+        self.set_key(key)
+        self.set_nonce(iv)
+        self.start()
+        
+        ciphertext = bytearray()
+        # Feed AAD
+        for i in range(0, len(aad), 16):
+            self.aead_next_block(aad[i:i+16])
+        # Feed Plaintext
+        for i in range(0, len(plaintext), 16):
+            self.aead_next_block(plaintext[i:i+16])
+            ciphertext.extend(self.read_result(min(16, len(plaintext)-i)))
+            
+        return bytes(ciphertext), self.read_tag()
+
     def des_encrypt(self, key: bytes, plaintext: bytes) -> bytes:
         """One-shot DES encryption."""
         self.reset()

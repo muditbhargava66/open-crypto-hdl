@@ -21,7 +21,7 @@ Implements four cryptographic engines:
 
 ```
 open-crypto-hdl/
-├── rtl/
+├── src/
 │   ├── chacha20/          Iterative 1-QR core (rotating state)
 │   ├── poly1305/          Bit-serial MAC (modulo 2^130 - 5)
 │   ├── aes/               Iterative 14-round core (shared S-Boxes)

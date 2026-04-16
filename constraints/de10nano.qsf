@@ -18,13 +18,13 @@ set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
 set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
 
 # ── Source files ──────────────────────────────────────────────────────────────
-set_global_assignment -name VERILOG_FILE ../../rtl/chacha20/chacha20_qr.v
-set_global_assignment -name VERILOG_FILE ../../rtl/chacha20/chacha20_core.v
-set_global_assignment -name VERILOG_FILE ../../rtl/aes/aes_sbox.v
-set_global_assignment -name VERILOG_FILE ../../rtl/aes/aes_core.v
-set_global_assignment -name VERILOG_FILE ../../rtl/des/des_core.v
-set_global_assignment -name VERILOG_FILE ../../rtl/poly1305/poly1305_core.v
-set_global_assignment -name VERILOG_FILE ../../rtl/tt_wrapper/tt_um_crypto_top.v
+set_global_assignment -name VERILOG_FILE ../../src/chacha20_qr.v
+set_global_assignment -name VERILOG_FILE ../../src/chacha20_core.v
+set_global_assignment -name VERILOG_FILE ../../src/aes_sbox.v
+set_global_assignment -name VERILOG_FILE ../../src/aes_core.v
+set_global_assignment -name VERILOG_FILE ../../src/des_core.v
+set_global_assignment -name VERILOG_FILE ../../src/poly1305_core.v
+set_global_assignment -name VERILOG_FILE ../../src/tt_um_crypto_top.v
 
 # ── Clock (DE10-Nano 50 MHz on-board) ────────────────────────────────────────
 set_location_assignment PIN_V11 -to clk

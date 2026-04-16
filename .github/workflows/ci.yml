@@ -100,7 +100,7 @@ jobs:
       - name: Convert SV → Verilog
         run: |
           mkdir -p compatible
-          sv2v rtl/chacha20/chacha20_qr.v rtl/chacha20/chacha20_core.v \
+          sv2v src/chacha20_qr.v src/chacha20_core.v \
             -w compatible/chacha20_core.v
 
       - name: Verify converted Verilog lints
@@ -125,7 +125,7 @@ jobs:
       - name: Check pin compliance
         run: |
           grep -E "ui_in|uo_out|uio_in|uio_out|uio_oe|ena|clk|rst_n" \
-            rtl/tt_wrapper/tt_um_crypto_top.v | head -20
+            src/tt_um_crypto_top.v | head -20
 
   # ─────────────────────────────────────────────────────────
   formal:

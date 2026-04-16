@@ -12,17 +12,17 @@ SBY        ?= sby
 PYTHON     ?= python3
 
 # ---- Source lists ----
-CHACHA_SRCS  = rtl/chacha20/chacha20_qr.v rtl/chacha20/chacha20_core.v
-POLY_SRCS    = rtl/poly1305/poly1305_core.v
-C20P_SRCS    = $(CHACHA_SRCS) $(POLY_SRCS) rtl/chacha20poly1305/chacha20poly1305_top.v
-AES_SRCS     = rtl/aes/aes_core.v
-AES_CTR_SRCS = $(AES_SRCS) rtl/aes/aes_ctr.v
-GCM_SRCS     = rtl/gcm/gf128_mul.v rtl/gcm/ghash_core.v
-AES_GCM_SRCS = $(AES_SRCS) $(GCM_SRCS) rtl/aes_gcm/aes_gcm_top.v
-DES_SRCS     = rtl/des/des_core.v
-TDES_SRCS    = $(DES_SRCS) rtl/des/tdes_core.v
-TT_SRCS      = $(CHACHA_SRCS) $(AES_SRCS) $(DES_SRCS) $(POLY_SRCS) rtl/tt_wrapper/tt_um_crypto_top.v
-FORMAL_SRCS  = $(CHACHA_SRCS) rtl/chacha20/chacha20_core_formal.v
+CHACHA_SRCS  = src/chacha20_qr.v src/chacha20_core.v
+POLY_SRCS    = src/poly1305_core.v
+C20P_SRCS    = $(CHACHA_SRCS) $(POLY_SRCS) src/chacha20poly1305_top.v
+AES_SRCS     = src/aes_core.v
+AES_CTR_SRCS = $(AES_SRCS) src/aes_ctr.v
+GCM_SRCS     = src/gf128_mul.v src/ghash_core.v
+AES_GCM_SRCS = $(AES_SRCS) $(GCM_SRCS) src/aes_gcm_top.v
+DES_SRCS     = src/des_core.v
+TDES_SRCS    = $(DES_SRCS) src/tdes_core.v
+TT_SRCS      = $(AES_GCM_SRCS) $(C20P_SRCS) $(DES_SRCS) src/tt_um_crypto_top.v
+FORMAL_SRCS  = $(CHACHA_SRCS) src/chacha20_core_formal.v
 
 # ---- Build directory ----
 BUILD := build
@@ -102,7 +102,7 @@ cocotb-gf128:
 	@echo "==> cocotb GF(2^128) multiplier..."
 	rm -rf sim_build
 	TOPLEVEL=gf128_mul MODULE=tb.cocotb.test_gf128_mul \
-	VERILOG_SOURCES="rtl/gcm/gf128_mul.v" SIM=icarus \
+	VERILOG_SOURCES="src/gf128_mul.v" SIM=icarus \
 	$(MAKE) -f $$(cocotb-config --makefiles)/Makefile.sim
 
 cocotb-ghash:
@@ -207,11 +207,11 @@ synth-report:
 	@echo "║          Synthesis Cell Count Summary            ║"
 	@echo "╠══════════════════════════════════════════════════╣"
 	@for entry in \
-	  "chacha20_qr|rtl/chacha20/chacha20_qr.v" \
-	  "chacha20_core|rtl/chacha20/chacha20_qr.v rtl/chacha20/chacha20_core.v" \
-	  "des_core|rtl/des/des_core.v" \
-	  "gf128_mul|rtl/gcm/gf128_mul.v" \
-	  "ghash_core|rtl/gcm/gf128_mul.v rtl/gcm/ghash_core.v"; do \
+	  "chacha20_qr|src/chacha20_qr.v" \
+	  "chacha20_core|src/chacha20_qr.v src/chacha20_core.v" \
+	  "des_core|src/des_core.v" \
+	  "gf128_mul|src/gf128_mul.v" \
+	  "ghash_core|src/gf128_mul.v src/ghash_core.v"; do \
 	    top="$${entry%%|*}"; files="$${entry#*|}"; \
 	    cells=$$($(YOSYS) -q -p "read_verilog $$files; synth -top $$top; stat;" 2>&1 \
 	      | grep "Number of cells" | tail -1 | awk '{print $$NF}'); \
