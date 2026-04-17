@@ -5,35 +5,28 @@
 
 Cryptographic cipher cores in Verilog 2001 / SystemVerilog, optimized for Silicon implementation on the **TinyTapeout** platform (sky130 process).
 
-The design uses area-optimized iterative architectures to fit a complete cryptographic suite into a standard 2x2 tile setup. Total cell count has been reduced from **98,000 to approximately 4,700 cells** through aggressive datapath sharing and bit-serial arithmetic.
+The design uses area-optimized iterative architectures to fit a complete cryptographic suite into a standard 2x2 tile setup. Total cell count has been reduced from **98,000 to approximately 37,000 cells** through aggressive datapath sharing and bit-serial arithmetic.
 
-![GDS Layout](docs/assets/full_chip_layout.png)
+![GDS Layout](layout.png)
 
-*Figure 1: Full Chip Layout (SKY130A). View high-resolution assets in [docs/assets/](docs/assets/).*
+*Figure 1: Full Chip Layout (SKY130A).*
 
 Implements four cryptographic engines:
-...
+- **ChaCha20** Stream Cipher (RFC 8439)
+- **Poly1305** MAC (RFC 8439)
+- **AES-256** Block Cipher (FIPS 197)
+- **DES** Block Cipher (FIPS 46-3)
+
 ---
 
 ## P&R Sign-off (LibreLane)
 
 The physical design was implemented using the LibreLane (OpenLane) flow with the following results:
 
-- **DRC**: ✅ Clean (Magic)
-- **LVS**: ✅ Clean (Netgen)
-- **Timing**: ✅ 20 MHz Closure across 9 PVT corners
+- **DRC**: Clean (Magic)
+- **LVS**: Clean (Netgen)
+- **Timing**: 20 MHz Closure across 9 PVT corners
 - **Area**: ~37.3k cells (85% logic utilization in 2x2 tile)
-
-Detailed layout views:
-- [Full Chip Layout](docs/assets/full_chip_layout.png)
-- [Routing Zoom](docs/assets/routing_zoom.png)
-- [Transistor Level Zoom](docs/assets/transistor_zoom.png)
-
----
-- **ChaCha20** Stream Cipher (RFC 8439)
-- **Poly1305** MAC (RFC 8439)
-- **AES-256** Block Cipher (FIPS 197)
-- **DES** Block Cipher (FIPS 46-3)
 
 ---
 
@@ -42,11 +35,11 @@ Detailed layout views:
 ```
 open-crypto-hdl/
 ├── src/
-│   ├── chacha20/          Iterative 1-QR core (rotating state)
-│   ├── poly1305/          Bit-serial MAC (modulo 2^130 - 5)
-│   ├── aes/               Iterative 14-round core (shared S-Boxes)
-│   ├── des/               Iterative Feistel core
-│   └── tt_wrapper/        TinyTapeout SPI-control wrapper
+│   ├── chacha20_core.v    Iterative 1-QR core (rotating state)
+│   ├── poly1305_core.v    Bit-serial MAC (modulo 2^130 - 5)
+│   ├── aes_core.v         Iterative 14-round core (shared S-Boxes)
+│   ├── des_core.v         Iterative Feistel core
+│   └── tt_um_crypto_top.v TinyTapeout SPI-control wrapper
 ├── tb/
 │   ├── cocotb/            cocotb Python testbenches (NIST/RFC KAT)
 │   ├── sv/                SystemVerilog self-checking testbenches
