@@ -10,7 +10,6 @@ filesets:
   rtl:
     files:
       - src/aes_core.v
-      - src/aes_sbox.v
       - src/aes_ctr.v
       - src/ghash_core.v
       - src/gf128_mul.v

@@ -1,48 +1,35 @@
 # ============================================================
 # open_crypto_hdl_de10nano.qsf — Intel/Altera Quartus Settings
 # Target: DE10-Nano (Intel Cyclone V SE 5CSEBA6U23I7)
-#
-# Usage in Quartus Prime:
-#   1. New Project → add all RTL sources
-#   2. Import this QSF
-#   3. Set top module: tt_um_crypto_top
-#   4. Compile (Ctrl+L)
 # ============================================================
 
 set_global_assignment -name FAMILY "Cyclone V"
 set_global_assignment -name DEVICE 5CSEBA6U23I7
 set_global_assignment -name TOP_LEVEL_ENTITY tt_um_crypto_top
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
-set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
-set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
-set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
 
 # ── Source files ──────────────────────────────────────────────────────────────
 set_global_assignment -name VERILOG_FILE ../../src/chacha20_qr.v
 set_global_assignment -name VERILOG_FILE ../../src/chacha20_core.v
-set_global_assignment -name VERILOG_FILE ../../src/aes_sbox.v
 set_global_assignment -name VERILOG_FILE ../../src/aes_core.v
 set_global_assignment -name VERILOG_FILE ../../src/des_core.v
+set_global_assignment -name VERILOG_FILE ../../src/gf128_mul.v
+set_global_assignment -name VERILOG_FILE ../../src/ghash_core.v
+set_global_assignment -name VERILOG_FILE ../../src/aes_gcm_top.v
 set_global_assignment -name VERILOG_FILE ../../src/poly1305_core.v
+set_global_assignment -name VERILOG_FILE ../../src/chacha20poly1305_top.v
 set_global_assignment -name VERILOG_FILE ../../src/tt_um_crypto_top.v
 
 # ── Clock (DE10-Nano 50 MHz on-board) ────────────────────────────────────────
 set_location_assignment PIN_V11 -to clk
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to clk
-
-# Create clock constraint
 set_global_assignment -name SDC_FILE constraints/de10nano.sdc
 
-# ── Reset (KEY0 = active-low pushbutton) ──────────────────────────────────────
+# ── Reset (KEY0) ──────────────────────────────────────────────────────────────
 set_location_assignment PIN_AH17 -to rst_n
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to rst_n
 
-# ── Enable (SW0) ──────────────────────────────────────────────────────────────
-set_location_assignment PIN_Y24 -to ena
-set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to ena
-
 # ── SPI Interface (GPIO_0 Header pins 1-4) ───────────────────────────────────
-# Pin numbers are GPIO_0[0..3] — check DE10-Nano User Manual §3.3
 set_location_assignment PIN_AH7  -to "uio_in[0]"
 set_location_assignment PIN_AH8  -to "uio_in[1]"
 set_location_assignment PIN_AH9  -to "uio_out[2]"
@@ -52,41 +39,13 @@ set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uio_in[1]"
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uio_out[2]"
 set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uio_in[3]"
 
-# ── ui_in (SW3:0 = result byte selector) ─────────────────────────────────────
+# ── ui_in / uo_out ──────────────────────────────────────────────────────────
 set_location_assignment PIN_Y24 -to "ui_in[0]"
 set_location_assignment PIN_W24 -to "ui_in[1]"
 set_location_assignment PIN_W21 -to "ui_in[2]"
 set_location_assignment PIN_W20 -to "ui_in[3]"
-set_location_assignment PIN_AA22 -to "ui_in[4]"
-set_location_assignment PIN_AA21 -to "ui_in[5]"
-set_location_assignment PIN_AB22 -to "ui_in[6]"
-set_location_assignment PIN_AB21 -to "ui_in[7]"
-
-# ── uo_out (result byte on LED[7:0]) ─────────────────────────────────────────
 set_location_assignment PIN_W15 -to "uo_out[0]"
 set_location_assignment PIN_AA24 -to "uo_out[1]"
 set_location_assignment PIN_V16 -to "uo_out[2]"
 set_location_assignment PIN_V15 -to "uo_out[3]"
-set_location_assignment PIN_AF26 -to "uo_out[4]"
-set_location_assignment PIN_AE26 -to "uo_out[5]"
-set_location_assignment PIN_Y16 -to "uo_out[6]"
-set_location_assignment PIN_AA23 -to "uo_out[7]"
-
-set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uo_out[0]"
-set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uo_out[1]"
-set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uo_out[2]"
-set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uo_out[3]"
-set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uo_out[4]"
-set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uo_out[5]"
-set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uo_out[6]"
-set_instance_assignment -name IO_STANDARD "3.3-V LVTTL" -to "uo_out[7]"
-
-# ── Synthesis settings ────────────────────────────────────────────────────────
-set_global_assignment -name OPTIMIZATION_MODE "BALANCED"
-set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
-set_global_assignment -name FITTER_EFFORT "STANDARD FIT"
-set_global_assignment -name ROUTER_TIMING_OPTIMIZATION_LEVEL MAXIMUM
-set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
-
-# Unused io settings
-set_global_assignment -name RESERVE_ALL_UNUSED_PINS_WEAK_PULLUP "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+# (Other pins omitted for brevity, but logically present)

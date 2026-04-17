@@ -2,6 +2,8 @@
 //  tt_um_crypto_top.v — TinyTapeout Top Module (v1.1.0 Silicon Ready)
 //  open-crypto-hdl: AEAD Suite with Unified Core Sharing
 // ============================================================
+/* verilator lint_off PINCONNECTEMPTY */
+/* verilator lint_off UNUSED */
 `default_nettype none
 module tt_um_crypto_top (
     input  wire [7:0] ui_in,

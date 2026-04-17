@@ -2,6 +2,8 @@
 //  chacha20poly1305_top.v — ChaCha20-Poly1305 AEAD Logic
 //  RFC 8439 §2.8
 // ============================================================
+/* verilator lint_off UNUSED */
+/* verilator lint_off CASEINCOMPLETE */
 `default_nettype none
 module chacha20poly1305_top (
     input  wire         clk,

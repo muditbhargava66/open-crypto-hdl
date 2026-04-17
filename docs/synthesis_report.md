@@ -28,31 +28,34 @@
 
 ---
 
-## Yosys Cell Counts (Area-Optimized Iterative Cores)
+## Yosys Cell Counts
 
-| Module             | Cells   | Notes                                     |
-|--------------------|---------|-------------------------------------------|
-| `chacha20_qr`      | 8       | Single shared QR unit (4 add, 4 xor)      |
-| `chacha20_core`    | 267     | Iterative: 1 QR/cycle, rotating state     |
-| `des_core`         | 802     | Iterative: 1 round/cycle, precomputed keys|
-| `aes_core`         | 2,823   | Iterative: 4 S-boxes shared, 4 cycles/step|
-| `poly1305_core`    | 1,034   | Bit-serial multiplier modulo 2^130 - 5    |
-| `tt_um_crypto_top` | 4,666   | Full wrapper including SPI and all cores  |
+Metrics generated via technology-independent flattened synthesis.
+
+| Module              | Internal Cells | Notes                                     |
+|---------------------|----------------|-------------------------------------------|
+| `chacha20_core`     | 2,246          | Optimized bit-serial / iterative          |
+| `des_core`          | 2,584          | Iterative Feistel                         |
+| `aes_core`          | 6,828          | Shared S-Boxes, 4 cycles/step             |
+| `poly1305_core`     | 7,324          | Bit-serial multiplier                     |
+| `aes_gcm_top`       | 13,877         | AEAD logic wrapper with GHASH             |
+| `chacha20poly_top`  | 13,294         | AEAD logic wrapper                        |
+| **tt_um_crypto_top**| **37,285**     | **Full suite with shared cores** |
 
 ---
 
 ## Latency & Throughput Estimates
+All estimates at **20 MHz** (Timing sign-off frequency).
+Throughput is reduced from v1.0.0 estimates due to lower clock target for safe PVT closure.
 
-All estimates at **100 MHz** system clock.
+| Core               | Latency (cycles) | Throughput (at 20MHz) |
+|--------------------|------------------|-----------------------|
+| ChaCha20 block     | 82               | 124 Mbps              |
+| DES                | 18               | 71 Mbps               |
+| AES-256 ECB        | ~235             | 10 Mbps               |
+| Poly1305           | 132              | 15 Mbps               |
+| AES-256-GCM        | ~400             | ~6 Mbps               |
 
-| Core               | Latency (cycles) | Block Size | Throughput      |
-|--------------------|------------------|------------|-----------------|
-| ChaCha20 block     | 82               | 512 bits   | 624 Mbps        |
-| DES                | 18               | 64 bits    | 355 Mbps        |
-| 3DES               | 54               | 64 bits    | 118 Mbps        |
-| AES-256 ECB        | ~235             | 128 bits   | 54 Mbps         |
-| Poly1305           | 132              | 128 bits   | 96 Mbps         |
-| AES-256-GCM        | ~400             | 128 bits   | ~32 Mbps        |
 
 ---
 
@@ -74,7 +77,7 @@ The entire cryptographic suite (AES-256, ChaCha20, DES, Poly1305) now fits withi
 | Tool              | Version | Notes                                  |
 |-------------------|---------|----------------------------------------|
 | Icarus Verilog    | 11.0    | `-g2012` flag required for SV features |
-| Yosys             | 0.9     | Technology-independent synthesis       |
+| Yosys             | 0.64    | Technology-independent synthesis       |
 | cocotb            | 2.0.1   | Python testbench framework             |
 | Verilator         | 5.0+    | Linting and static analysis            |
 

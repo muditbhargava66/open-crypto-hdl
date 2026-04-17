@@ -87,21 +87,21 @@ module poly1305_core (
     reg [128:0] padded_block;
     always @(*) begin
         case (block_len)
-            5'd1:  padded_block = {120'd1, block_le[7:0]};
-            5'd2:  padded_block = {112'd1, block_le[15:0]};
-            5'd3:  padded_block = {104'd1, block_le[23:0]};
-            5'd4:  padded_block = {96'd1,  block_le[31:0]};
-            5'd5:  padded_block = {88'd1,  block_le[39:0]};
-            5'd6:  padded_block = {80'd1,  block_le[47:0]};
-            5'd7:  padded_block = {72'd1,  block_le[55:0]};
-            5'd8:  padded_block = {64'd1,  block_le[63:0]};
-            5'd9:  padded_block = {56'd1,  block_le[71:0]};
-            5'd10: padded_block = {48'd1,  block_le[79:0]};
-            5'd11: padded_block = {40'd1,  block_le[87:0]};
-            5'd12: padded_block = {32'd1,  block_le[95:0]};
-            5'd13: padded_block = {24'd1,  block_le[103:0]};
-            5'd14: padded_block = {16'd1,  block_le[111:0]};
-            5'd15: padded_block = {8'd1,   block_le[119:0]};
+            5'd1:  padded_block = {121'd1, block_le[7:0]};
+            5'd2:  padded_block = {113'd1, block_le[15:0]};
+            5'd3:  padded_block = {105'd1, block_le[23:0]};
+            5'd4:  padded_block = {97'd1,  block_le[31:0]};
+            5'd5:  padded_block = {89'd1,  block_le[39:0]};
+            5'd6:  padded_block = {81'd1,  block_le[47:0]};
+            5'd7:  padded_block = {73'd1,  block_le[55:0]};
+            5'd8:  padded_block = {65'd1,  block_le[63:0]};
+            5'd9:  padded_block = {57'd1,  block_le[71:0]};
+            5'd10: padded_block = {49'd1,  block_le[79:0]};
+            5'd11: padded_block = {41'd1,  block_le[87:0]};
+            5'd12: padded_block = {33'd1,  block_le[95:0]};
+            5'd13: padded_block = {25'd1,  block_le[103:0]};
+            5'd14: padded_block = {17'd1,  block_le[111:0]};
+            5'd15: padded_block = {9'd1,   block_le[119:0]};
             5'd16: padded_block = {1'b1,   block_le[127:0]};
             default: padded_block = {1'b1, block_le[127:0]};
         endcase

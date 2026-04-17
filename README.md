@@ -45,22 +45,23 @@ open-crypto-hdl/
 
 ### Area Metrics (sky130A)
 
-| Module          | Cells (Iterative) | Optimization Strategy                  |
+| Module          | Cells (Flattened) | Optimization Strategy                  |
 |-----------------|-------------------|----------------------------------------|
-| `chacha20_core` | ~270              | Single QR unit, rotating 512-bit state |
-| `aes_core`      | ~2,800            | Shared S-Boxes, word-based iteration   |
-| `des_core`      | ~800              | Classic iterative Feistel              |
-| `poly1305_core` | ~1,000            | Bit-serial shift-add multiplier        |
-| **Total Top**   | **4,666**         | **2x2 TinyTapeout Tile (24.5% util)**  |
+| `chacha20_core` | ~2,250            | Shared QR unit, rotating 512-bit state |
+| `aes_core`      | ~6,800            | Shared S-Boxes, word-based iteration   |
+| `des_core`      | ~2,500            | Classic iterative Feistel              |
+| `poly1305_core` | ~7,300            | Bit-serial shift-add multiplier        |
+| **Total Top**   | **37,285**        | **Unified AEAD Suite**                 |
 
 ### Performance Estimates (Multi-Corner STA)
 
-| Core     | Max Freq (TT) | Max Freq (SS) | Throughput (at 20MHz) |
-|----------|---------------|---------------|-----------------------|
-| ChaCha20 | 42 MHz        | 21 MHz        | 124 Mbps              |
-| AES-256  | 42 MHz        | 21 MHz        | 10 Mbps               |
-| DES      | 42 MHz        | 21 MHz        | 71 Mbps               |
-| Poly1305 | 42 MHz        | 21 MHz        | 15 Mbps               |
+| Core          | Max Freq (TT) | Max Freq (SS) | Throughput (at 20MHz) |
+|---------------|---------------|---------------|-----------------------|
+| ChaCha20      | 42 MHz        | 21 MHz        | 124 Mbps              |
+| AES-256       | 42 MHz        | 21 MHz        | 10 Mbps               |
+| DES           | 42 MHz        | 21 MHz        | 71 Mbps               |
+| Poly1305      | 42 MHz        | 21 MHz        | 15 Mbps               |
+
 
 ---
 
@@ -99,16 +100,18 @@ The `tt_um_crypto_top.v` wrapper exposes all cores through a shared SPI register
 
 ### SPI Register Map
 
-| Address | Name | Access | Description |
-|---------|------|--------|-------------|
-| `0x00` | `CIPHER` | R/W | `00`=DES, `01`=AES, `10`=ChaCha, `11`=Poly |
-| `0x01` | `CMD` | W | `0x01`=Start, `0x02`=Reset, `0x04`=Poly-Init |
-| `0x02` | `STATUS` | R | `bit 0`=Busy, `bit 1`=Done |
-| `0x10`–`0x2F` | `KEY` | R/W | 256-bit Key Storage |
-| `0x30`–`0x3B` | `IV` | R/W | 96-bit IV/Nonce |
-| `0x40`–`0x4F` | `BLOCK` | R/W | 128-bit Input Block |
-| `0x50`–`0x5F` | `RESULT` | R | 128-bit Output Buffer |
-| `0x60`–`0x6F` | `TAG` | R | 128-bit Authentication Tag |
+| Address       | Name       | Access | Description                                                                 |
+|---------------|------------|--------|-----------------------------------------------------------------------------|
+| `0x00`        | `CIPHER`   | R/W    | `[2:0]`: DES(0), AES(1), ChaCha(2), Poly(3), GCM(4), C20P(5). `[3]`: 1=Enc, 0=Dec. |
+| `0x01`        | `CMD`      | W      | `0x01`=Start, `0x02`=Reset, `0x04`=Poly-Init, `0x08`=AEAD-Next              |
+| `0x02`        | `STATUS`   | R      | `bit 0`=Busy, `bit 1`=Done                                                  |
+| `0x04`–`0x07` | `AAD_LEN`  | R/W    | 32-bit AAD Length (Big-Endian)                                              |
+| `0x08`–`0x0B` | `PT_LEN`   | R/W    | 32-bit PT/CT Length (Big-Endian)                                            |
+| `0x10`–`0x2F` | `KEY`      | R/W    | 256-bit Key Storage                                                         |
+| `0x30`–`0x3B` | `IV`       | R/W    | 96-bit IV/Nonce                                                             |
+| `0x40`–`0x4F` | `BLOCK`    | R/W    | 128-bit Input Block                                                         |
+| `0x50`–`0x5F` | `RESULT`   | R      | 128-bit Output Buffer                                                       |
+| `0x60`–`0x6F` | `TAG`      | R      | 128-bit Authentication Tag                                                  |
 
 ---
 

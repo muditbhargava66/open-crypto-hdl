@@ -1,61 +1,38 @@
 # ============================================================
 # area_estimate.ys — Yosys area estimation for all crypto cores
-# Uses technology-independent synthesis then maps to gate estimates.
 # ============================================================
 
-# ── ChaCha20 ──────────────────────────────────────────────────
 design -reset
-read_verilog rtl/chacha20/chacha20_qr.v
-read_verilog rtl/chacha20/chacha20_core.v
+read_verilog src/chacha20_qr.v src/chacha20_core.v
 synth -top chacha20_core -flatten
-echo "=== ChaCha20 Core Stats ==="
 stat
 
-# ── DES ───────────────────────────────────────────────────────
 design -reset
-read_verilog rtl/des/des_core.v
+read_verilog src/des_core.v
 synth -top des_core -flatten
-echo "=== DES Core Stats ==="
 stat
 
-# ── AES-256 ───────────────────────────────────────────────────
 design -reset
-read_verilog rtl/aes/aes_sbox.v
-read_verilog rtl/aes/aes_core.v
+read_verilog src/aes_core.v
 synth -top aes_core -flatten
-echo "=== AES-256 Core Stats ==="
 stat
 
-# ── GF(2^128) Multiplier ──────────────────────────────────────
 design -reset
-read_verilog rtl/gcm/gf128_mul.v
-synth -top gf128_mul -flatten
-echo "=== GF(2^128) Multiplier Stats ==="
-stat
-
-# ── GHASH ─────────────────────────────────────────────────────
-design -reset
-read_verilog rtl/gcm/gf128_mul.v
-read_verilog rtl/gcm/ghash_core.v
-synth -top ghash_core -flatten
-echo "=== GHASH Core Stats ==="
-stat
-
-# ── Poly1305 ──────────────────────────────────────────────────
-design -reset
-read_verilog rtl/poly1305/poly1305_core.v
+read_verilog src/poly1305_core.v
 synth -top poly1305_core -flatten
-echo "=== Poly1305 Core Stats ==="
 stat
 
-# ── TinyTapeout Wrapper (all cores) ───────────────────────────
 design -reset
-read_verilog rtl/chacha20/chacha20_qr.v
-read_verilog rtl/chacha20/chacha20_core.v
-read_verilog rtl/aes/aes_sbox.v
-read_verilog rtl/aes/aes_core.v
-read_verilog rtl/des/des_core.v
-read_verilog rtl/tt_wrapper/tt_um_crypto_top.v
+read_verilog src/aes_core.v src/gf128_mul.v src/ghash_core.v src/aes_gcm_top.v
+synth -top aes_gcm_top -flatten
+stat
+
+design -reset
+read_verilog src/chacha20_qr.v src/chacha20_core.v src/poly1305_core.v src/chacha20poly1305_top.v
+synth -top chacha20poly1305_top -flatten
+stat
+
+design -reset
+read_verilog src/*.v
 synth -top tt_um_crypto_top -flatten
-echo "=== TT Wrapper (All Cores) Stats ==="
 stat

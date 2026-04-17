@@ -20,6 +20,6 @@ read_verilog -formal chacha20_core_formal.v
 prep -top chacha20_core_formal
 
 [files]
-rtl/chacha20/chacha20_qr.v
-rtl/chacha20/chacha20_core.v
-rtl/chacha20/chacha20_core_formal.v
+src/chacha20_qr.v
+src/chacha20_core.v
+src/chacha20_core_formal.v

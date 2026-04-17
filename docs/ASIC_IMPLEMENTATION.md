@@ -18,9 +18,9 @@ The design is highly consolidated through iterative datapath sharing.
 
 | Metric              | Value            |
 |---------------------|------------------|
-| Total Cell Count    | 4,666            |
-| Logic Utilization   | 24.5%            |
-| Standard Cell Area  | ~18,200 µm²      |
+| Total Cell Count    | 37,285           |
+| Logic Utilization   | ~85% (Est. 2x2)  |
+| Standard Cell Area  | ~58,000 µm²      |
 | Total Die Area      | 460µm x 172µm    |
 
 ## Multi-Corner Timing Sign-off (STA)

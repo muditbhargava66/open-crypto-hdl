@@ -12,5 +12,5 @@ read_verilog -formal aes_core_formal.v
 prep -top aes_core_formal
 
 [files]
-rtl/aes/aes_core.v
-rtl/aes/aes_core_formal.v
+src/aes_core.v
+src/aes_core_formal.v

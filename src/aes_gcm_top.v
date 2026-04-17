@@ -2,13 +2,16 @@
 //  aes_gcm_top.v — AES-256-GCM Logic Wrapper
 //  NIST SP 800-38D
 // ============================================================
+/* verilator lint_off MULTITOP */
 `default_nettype none
 module aes_gcm_top (
     input  wire         clk,
     input  wire         rst_n,
 
     // Configuration
+    /* verilator lint_off UNUSED */
     input  wire [255:0] key,
+    /* verilator lint_on UNUSED */
     input  wire  [95:0] iv,
     input  wire  [63:0] aad_len,
     input  wire  [63:0] pt_len,
@@ -63,7 +66,6 @@ module aes_gcm_top (
     wire         ghash_ready;
 
     reg  [127:0] H;
-    reg  [255:0] key_reg;
     reg   [95:0] iv_reg;
 
     ghash_core u_ghash (
@@ -89,13 +91,13 @@ module aes_gcm_top (
         input [127:0] data;
         input [63:0] processed;
         input [63:0] total;
-        reg [63:0] diff;
+        reg [3:0] diff;
         begin
             if (processed + 16 <= total) begin
                 mask_block = data;
             end else begin
-                diff = total - processed;
-                case (diff[3:0])
+                diff = total[3:0] - processed[3:0];
+                case (diff)
                     4'd1:  mask_block = data & 128'hFF000000000000000000000000000000;
                     4'd2:  mask_block = data & 128'hFFFF0000000000000000000000000000;
                     4'd3:  mask_block = data & 128'hFFFFFF00000000000000000000000000;
@@ -139,7 +141,6 @@ module aes_gcm_top (
             case (state)
                 S_IDLE: begin
                     if (start) begin
-                        key_reg   <= key;
                         iv_reg    <= iv;
                         j0        <= {iv, 32'h00000001};
                         ctr_val   <= 32'd2;
