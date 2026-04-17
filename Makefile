@@ -272,8 +272,9 @@ tt-png:
 	ln -sf $$(pwd)/runs/wokwi/*-klayout-streamout/*.klayout.gds runs/wokwi/final/gds/tt_um_crypto_top.gds
 	./tt/tt_tool.py --create-png
 	./tt/tt_tool.py --create-svg
-	mv gds_render.png layout.png
-	mv gds_render_preview.svg layout.svg
+	mkdir -p docs/assets
+	mv gds_render.png docs/assets/full_chip_layout.png
+	mv gds_render_preview.svg docs/assets/full_chip_layout.svg
 	rm -f gds_render_preview.png gds_render.svg
 
 tt-klayout:
